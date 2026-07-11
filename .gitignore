@@ -1,1 +1,12 @@
 dtl1
+# Build artifacts and local environment
+node_modules/
+web/.next/
+web/out/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+relayer/bin/
+relayer/internal/chain/bindings/
+.env
+.env.*
