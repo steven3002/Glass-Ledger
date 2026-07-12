@@ -5,15 +5,13 @@ import {DebtLedger} from "../src/debt/DebtLedger.sol";
 import {IDebtLedger} from "../src/interfaces/IDebtLedger.sol";
 import {IProofVerifier} from "../src/oracle/IProofVerifier.sol";
 import {Types} from "../src/libs/Types.sol";
+import {StubProofVerifier} from "../src/oracle/StubProofVerifier.sol";
 import {Fixture} from "./utils/Fixture.sol";
-import {MockProofVerifier} from "./utils/MockProofVerifier.sol";
 
 contract DebtLedgerTest is Fixture {
     address internal pool;
     address internal sweep;
 
-    uint256 internal constant PRICE = 100_000e18;
-    uint256 internal constant SALE_REF = 1001;
     bytes internal constant PROOF = hex"c0ffee";
 
     function setUp() public override {
@@ -29,42 +27,8 @@ contract DebtLedgerTest is Fixture {
 
     // --- Helpers ---
 
-    function _saleLegs() internal view returns (IDebtLedger.Leg[] memory legs) {
-        (
-            uint256 creatorAmount,
-            uint256 landlordAmount,
-            uint256 communityAmount,
-            uint256 operatorAmount
-        ) = _legs(PRICE, true);
-
-        legs = new IDebtLedger.Leg[](4);
-        legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, creatorAmount);
-        legs[1] = IDebtLedger.Leg(Types.Role.LANDLORD, landlord, landlordAmount);
-        legs[2] = IDebtLedger.Leg(Types.Role.COMMUNITY, communityMember, communityAmount);
-        legs[3] = IDebtLedger.Leg(Types.Role.OPERATOR, treasury, operatorAmount);
-    }
-
-    function _mintSale(Types.Rail rail, bytes32 claimRef) internal returns (uint256[] memory) {
-        vm.prank(address(gateway));
-        return debts.mintSaleDebts(SALE_REF, rail, CURRENCY, _saleLegs(), claimRef);
-    }
-
-    /// @dev The three legs a claim can cover: everything but the operator's own.
-    function _payable(uint256[] memory debtIds) internal pure returns (uint256[] memory owed) {
-        owed = new uint256[](3);
-        owed[0] = debtIds[0];
-        owed[1] = debtIds[1];
-        owed[2] = debtIds[2];
-    }
-
-    function _cashClaim() internal returns (uint256[] memory debtIds, uint256 claimId) {
-        debtIds = _mintSale(Types.Rail.CUSTODY, bytes32(0));
-        vm.prank(operator);
-        claimId = debts.postClaim(_payable(debtIds), CLAIM_REF);
-    }
-
     function _proveNext(uint256 claimId) internal {
-        proofs.setVerdict(debts.statementOf(claimId), true);
+        _setVerdict(claimId, true);
     }
 
     // --- Minting ---
@@ -80,7 +44,7 @@ contract DebtLedgerTest is Fixture {
         assertEq(uint8(owed.role), uint8(Types.Role.CREATOR));
         assertEq(uint8(owed.rail), uint8(Types.Rail.CUSTODY));
         assertEq(uint8(owed.state), uint8(Types.DebtState.AGING));
-        assertEq(owed.amount, PRICE * CREATOR_BPS / 10_000);
+        assertEq(owed.amount, SALE_PRICE * CREATOR_BPS / 10_000);
         assertEq(owed.currency, CURRENCY);
         assertEq(owed.mintedAt, uint64(block.timestamp));
         assertEq(owed.deadline, uint64(block.timestamp) + SETTLEMENT_WINDOW);
@@ -133,7 +97,7 @@ contract DebtLedgerTest is Fixture {
 
     function test_custodyExposureCountsEveryLegButTheOperatorsOwn() public {
         _mintSale(Types.Rail.CUSTODY, bytes32(0));
-        assertEq(debts.outstanding(), PRICE * 8750 / 10_000);
+        assertEq(debts.outstanding(), SALE_PRICE * 8750 / 10_000);
     }
 
     function test_onlyTheGatewayMints() public {
@@ -202,7 +166,7 @@ contract DebtLedgerTest is Fixture {
     function test_aClaimCapturesTheWholeTupleFromTheLedgersOwnState() public {
         (uint256[] memory ids, uint256 claimId) = _cashClaim();
         (uint256 creatorAmount, uint256 landlordAmount, uint256 communityAmount,) =
-            _legs(PRICE, true);
+            _legs(SALE_PRICE, true);
 
         assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.PROVISIONAL));
         assertEq(debts.claim(claimId).totalAmount, creatorAmount + landlordAmount + communityAmount);
@@ -226,7 +190,7 @@ contract DebtLedgerTest is Fixture {
         assertTrue(statement.success);
 
         // Posting a claim does not release the money: the operator is still holding it.
-        assertEq(debts.outstanding(), PRICE * 8750 / 10_000);
+        assertEq(debts.outstanding(), SALE_PRICE * 8750 / 10_000);
     }
 
     function test_onlyTheOperatorPostsClaims() public {
@@ -418,6 +382,68 @@ contract DebtLedgerTest is Fixture {
         debts.challengeFor(claimId, creator, forged);
     }
 
+    /// @dev A signed challenge names the ledger it was signed for. Two deployments of this protocol
+    ///      — a testnet rehearsal and the live one, or two locations running their own instances —
+    ///      hold claims under the same ids, so a signature that did not name its ledger could be
+    ///      lifted from one and replayed on the other. This one names it: the deployment's address
+    ///      is inside the digest, so the same bytes that challenge claim 1 here mean nothing there.
+    function test_aChallengeSignatureDoesNotTravelToAnotherDeployment() public {
+        (, uint256 claimId) = _cashClaim();
+
+        // A second, identically parameterised deployment, carrying the same claim id over the same
+        // debt. Everything about the two claims is the same except which ledger holds them.
+        DebtLedger other = new DebtLedger(
+            operator, proofs, SETTLEMENT_WINDOW, CHALLENGE_WINDOW, RESPONSE_WINDOW, PENALTY_BPS
+        );
+        vm.prank(operator);
+        other.setSaleGateway(address(this));
+        vm.prank(creator);
+        other.setAccountHash(CURRENCY, _accountHash(creator));
+
+        IDebtLedger.Leg[] memory legs = new IDebtLedger.Leg[](1);
+        legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, SALE_PRICE);
+        uint256[] memory ids =
+            other.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
+
+        vm.prank(operator);
+        uint256 twin = other.postClaim(ids, CLAIM_REF);
+        assertEq(twin, claimId);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(creatorKey, _challengeDigest(claimId, creator));
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.expectRevert(DebtLedger.BadChallengeSignature.selector);
+        vm.prank(stranger);
+        other.challengeFor(twin, creator, signature);
+
+        // The same bytes, on the ledger they were signed for, are a valid challenge — so the
+        // rejection above was about *which deployment*, and nothing else.
+        vm.prank(stranger);
+        debts.challengeFor(claimId, creator, signature);
+        assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.CHALLENGED));
+    }
+
+    /// @dev And it names the chain. The same contract at the same address on a fork — or on a
+    ///      testnet the operator also runs — is a different ledger, and a challenge signed for one
+    ///      is not a challenge on the other.
+    function test_aChallengeSignatureDoesNotTravelToAnotherChain() public {
+        (, uint256 claimId) = _cashClaim();
+
+        uint256 chain = block.chainid;
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(creatorKey, _challengeDigest(claimId, creator));
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.chainId(chain + 1);
+        vm.expectRevert(DebtLedger.BadChallengeSignature.selector);
+        vm.prank(stranger);
+        debts.challengeFor(claimId, creator, signature);
+
+        vm.chainId(chain);
+        vm.prank(stranger);
+        debts.challengeFor(claimId, creator, signature);
+        assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.CHALLENGED));
+    }
+
     function _challengeDigest(uint256 claimId, address recipient) internal view returns (bytes32) {
         bytes32 structHash = keccak256(abi.encode(debts.CHALLENGE_TYPEHASH(), claimId, recipient));
         return keccak256(
@@ -528,7 +554,7 @@ contract DebtLedgerTest is Fixture {
         assertEq(after_.claimRef, bytes32(0));
 
         // The money is back where it always was: in the operator's hands.
-        assertEq(debts.outstanding(), PRICE * 8750 / 10_000);
+        assertEq(debts.outstanding(), SALE_PRICE * 8750 / 10_000);
     }
 
     function test_aVoidCannotLandWhileTheOperatorStillHasTimeToAnswer() public {
@@ -617,7 +643,7 @@ contract DebtLedgerTest is Fixture {
         debts.voidChallenged(1);
 
         assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.AGING));
-        assertEq(debts.outstanding(), PRICE * 8750 / 10_000);
+        assertEq(debts.outstanding(), SALE_PRICE * 8750 / 10_000);
     }
 
     // --- The sweep's seam ---
@@ -662,7 +688,7 @@ contract DebtLedgerTest is Fixture {
 
         assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.VOIDED));
         assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.AGING));
-        assertEq(debts.outstanding(), PRICE * 8750 / 10_000);
+        assertEq(debts.outstanding(), SALE_PRICE * 8750 / 10_000);
         assertTrue(debts.isDefaultable(ids[0]));
     }
 
@@ -746,13 +772,13 @@ contract DebtLedgerTest is Fixture {
         uint64 deadline = uint64(block.timestamp) + FULFILMENT_WINDOW;
 
         vm.prank(address(gateway));
-        uint256 id = debts.mintObligation(SALE_REF, buyer, PRICE, CURRENCY, deadline);
+        uint256 id = debts.mintObligation(SALE_REF, buyer, SALE_PRICE, CURRENCY, deadline);
 
         IDebtLedger.Debt memory owed = debts.debt(id);
         assertEq(uint8(owed.role), uint8(Types.Role.BUYER));
         assertEq(uint8(owed.state), uint8(Types.DebtState.AGING));
-        assertEq(owed.amount, PRICE);
-        assertEq(debts.outstanding(), PRICE);
+        assertEq(owed.amount, SALE_PRICE);
+        assertEq(debts.outstanding(), SALE_PRICE);
 
         vm.prank(address(gateway));
         debts.dischargeObligation(id);
@@ -772,7 +798,7 @@ contract DebtLedgerTest is Fixture {
     function test_anObligationIsDischargedOnce() public {
         vm.prank(address(gateway));
         uint256 id = debts.mintObligation(
-            SALE_REF, buyer, PRICE, CURRENCY, uint64(block.timestamp) + FULFILMENT_WINDOW
+            SALE_REF, buyer, SALE_PRICE, CURRENCY, uint64(block.timestamp) + FULFILMENT_WINDOW
         );
 
         vm.prank(address(gateway));
@@ -826,7 +852,7 @@ contract DebtLedgerTest is Fixture {
         new DebtLedger(address(0), proofs, 1, 1, 1, 100);
 
         vm.expectRevert(DebtLedger.ZeroAddress.selector);
-        new DebtLedger(operator, MockProofVerifier(address(0)), 1, 1, 1, 100);
+        new DebtLedger(operator, StubProofVerifier(address(0)), 1, 1, 1, 100);
 
         vm.expectRevert(DebtLedger.InvalidWindow.selector);
         new DebtLedger(operator, proofs, 0, 1, 1, 100);

@@ -4,13 +4,16 @@ pragma solidity 0.8.36;
 import {Test} from "forge-std/Test.sol";
 import {CreatorRegistry} from "../../src/identity/CreatorRegistry.sol";
 import {DebtLedger} from "../../src/debt/DebtLedger.sol";
+import {IDebtLedger} from "../../src/interfaces/IDebtLedger.sol";
 import {ItemLedger} from "../../src/items/ItemLedger.sol";
 import {PriceBook} from "../../src/items/PriceBook.sol";
 import {SaleGateway} from "../../src/sale/SaleGateway.sol";
+import {IProofVerifier} from "../../src/oracle/IProofVerifier.sol";
+import {StubProofVerifier} from "../../src/oracle/StubProofVerifier.sol";
 import {ClaimCodes} from "../../src/libs/ClaimCodes.sol";
+import {Types} from "../../src/libs/Types.sol";
 import {MerkleBuilder} from "./MerkleBuilder.sol";
 import {MockAuthorizer} from "./MockAuthorizer.sol";
-import {MockProofVerifier} from "./MockProofVerifier.sol";
 
 /// @notice A deployed protocol with one creator, one consignment of thirteen items, a seeded price
 ///         book and every payable party's account on file — the demo's opening state, and the
@@ -23,6 +26,11 @@ abstract contract Fixture is Test {
     uint32 internal constant PRICE_EPOCH = 2 minutes;
     uint16 internal constant PENALTY_BPS = 100;
     uint32 internal constant ITEM_COUNT = 13;
+
+    /// @notice One sale, for the suites that mint debts through the ledger's own seam rather than
+    ///         by selling an item. The price is item zero's, so the arithmetic matches the demo's.
+    uint256 internal constant SALE_PRICE = 100_000e18;
+    uint256 internal constant SALE_REF = 1001;
 
     // The currency is a tag, not a number: a short ISO code widened into a word.
     // forge-lint: disable-next-line(unsafe-typecast)
@@ -50,7 +58,7 @@ abstract contract Fixture is Test {
     PriceBook internal prices;
     DebtLedger internal debts;
     MockAuthorizer internal authorizer;
-    MockProofVerifier internal proofs;
+    StubProofVerifier internal proofs;
     SaleGateway internal gateway;
 
     uint256 internal creatorId;
@@ -72,7 +80,7 @@ abstract contract Fixture is Test {
         registry = new CreatorRegistry(operator);
         items = new ItemLedger(operator, registry);
         prices = new PriceBook(items, registry, PRICE_EPOCH);
-        proofs = new MockProofVerifier();
+        proofs = new StubProofVerifier(operator);
         debts = new DebtLedger(
             operator, proofs, SETTLEMENT_WINDOW, CHALLENGE_WINDOW, RESPONSE_WINDOW, PENALTY_BPS
         );
@@ -124,6 +132,54 @@ abstract contract Fixture is Test {
 
     function _accountHash(address who) internal pure returns (bytes32) {
         return keccak256(abi.encode("account", who));
+    }
+
+    /// @notice The verdict a real verifier would compute for this claim's statement.
+    /// @dev The statement is always the ledger's own — never one the caller composes. A suite that
+    ///      wants to prove a *different* statement has to build it deliberately, which is the point.
+    function _setVerdict(uint256 claimId, bool valid) internal {
+        // Read the statement before arming the prank: an argument that makes its own call would
+        // spend the impersonation on the read and leave the write to the test contract.
+        IProofVerifier.Statement memory statement = debts.statementOf(claimId);
+        vm.prank(operator);
+        proofs.setVerdict(statement, valid);
+    }
+
+    /// @notice The four legs of one sale at the listed price, community voucher presented.
+    function _saleLegs() internal view returns (IDebtLedger.Leg[] memory legs) {
+        (
+            uint256 creatorAmount,
+            uint256 landlordAmount,
+            uint256 communityAmount,
+            uint256 operatorAmount
+        ) = _legs(SALE_PRICE, true);
+
+        legs = new IDebtLedger.Leg[](4);
+        legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, creatorAmount);
+        legs[1] = IDebtLedger.Leg(Types.Role.LANDLORD, landlord, landlordAmount);
+        legs[2] = IDebtLedger.Leg(Types.Role.COMMUNITY, communityMember, communityAmount);
+        legs[3] = IDebtLedger.Leg(Types.Role.OPERATOR, treasury, operatorAmount);
+    }
+
+    /// @notice A sale's debts, minted through the seam the gateway mints through.
+    function _mintSale(Types.Rail rail, bytes32 claimRef) internal returns (uint256[] memory) {
+        vm.prank(address(gateway));
+        return debts.mintSaleDebts(SALE_REF, rail, CURRENCY, _saleLegs(), claimRef);
+    }
+
+    /// @dev The three legs a claim can cover: everything but the operator's own.
+    function _payable(uint256[] memory debtIds) internal pure returns (uint256[] memory owed) {
+        owed = new uint256[](3);
+        owed[0] = debtIds[0];
+        owed[1] = debtIds[1];
+        owed[2] = debtIds[2];
+    }
+
+    /// @notice A cash sale, and the operator's assertion that it paid for it.
+    function _cashClaim() internal returns (uint256[] memory debtIds, uint256 claimId) {
+        debtIds = _mintSale(Types.Rail.CUSTODY, bytes32(0));
+        vm.prank(operator);
+        claimId = debts.postClaim(_payable(debtIds), CLAIM_REF);
     }
 
     function _registerAccount(address who) internal {

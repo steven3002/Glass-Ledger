@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DebtLedger} from "../src/debt/DebtLedger.sol";
 import {IDebtLedger} from "../src/interfaces/IDebtLedger.sol";
 import {Types} from "../src/libs/Types.sol";
-import {MockProofVerifier} from "./utils/MockProofVerifier.sol";
+import {StubProofVerifier} from "../src/oracle/StubProofVerifier.sol";
 
 /// @notice The stall attempt, on the clock.
 ///
@@ -42,7 +42,7 @@ contract StallAttemptTest is Test {
     uint256 internal creatorKey;
 
     DebtLedger internal debts;
-    MockProofVerifier internal proofs;
+    StubProofVerifier internal proofs;
 
     uint256 internal day0;
 
@@ -52,7 +52,7 @@ contract StallAttemptTest is Test {
         stranger = makeAddr("stranger");
         (creator, creatorKey) = makeAddrAndKey("creator");
 
-        proofs = new MockProofVerifier();
+        proofs = new StubProofVerifier(operator);
         debts = new DebtLedger(
             operator, proofs, SETTLEMENT_WINDOW, CHALLENGE_WINDOW, RESPONSE_WINDOW, PENALTY_BPS
         );
@@ -261,9 +261,10 @@ contract StallAttemptTest is Test {
         debts.challenge(claimId);
 
         vm.warp(_day(3));
+        vm.startPrank(operator);
         proofs.setVerdict(debts.statementOf(claimId), true);
-        vm.prank(operator);
         debts.respond(claimId, PROOF);
+        vm.stopPrank();
 
         assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.PROVEN));
         assertEq(uint8(debts.debt(debtId).state), uint8(Types.DebtState.PROVEN));
