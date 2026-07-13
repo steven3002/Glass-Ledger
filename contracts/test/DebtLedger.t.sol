@@ -9,20 +9,18 @@ import {StubProofVerifier} from "../src/oracle/StubProofVerifier.sol";
 import {Fixture} from "./utils/Fixture.sol";
 
 contract DebtLedgerTest is Fixture {
-    address internal pool;
-    address internal sweep;
-
     bytes internal constant PROOF = hex"c0ffee";
 
-    function setUp() public override {
-        super.setUp();
-        pool = makeAddr("pool");
-        sweep = makeAddr("sweep");
+    /// @dev The ledger's two privileged seams, as the deployment wires them. This suite drives them
+    ///      directly — the pool's default call and the sweep's coverage calls — because what is under
+    ///      test is the ledger's own answer to them, not the treasury's arithmetic or the sweep's
+    ///      cadence. To the ledger they are two addresses, and the gate is that they are *those* two.
+    function _pool() internal view returns (address) {
+        return address(pool);
+    }
 
-        vm.startPrank(operator);
-        debts.setPool(pool);
-        debts.setSweepRegistry(sweep);
-        vm.stopPrank();
+    function _sweep() internal view returns (address) {
+        return address(sweep);
     }
 
     // --- Helpers ---
@@ -72,7 +70,7 @@ contract DebtLedgerTest is Fixture {
 
         vm.warp(block.timestamp + SETTLEMENT_WINDOW + 1);
         vm.expectRevert(abi.encodeWithSelector(DebtLedger.NotDefaulted.selector, own));
-        vm.prank(pool);
+        vm.prank(_pool());
         debts.markDefaulted(own);
     }
 
@@ -262,7 +260,7 @@ contract DebtLedgerTest is Fixture {
         uint256[] memory ids = _mintSale(Types.Rail.CUSTODY, bytes32(0));
 
         vm.warp(block.timestamp + SETTLEMENT_WINDOW + 1);
-        vm.prank(pool);
+        vm.prank(_pool());
         debts.markDefaulted(ids[0]);
 
         uint256[] memory late = new uint256[](1);
@@ -663,7 +661,7 @@ contract DebtLedgerTest is Fixture {
     function test_coverageProvesAClaimEvenBeforeItsWindowCloses() public {
         (uint256[] memory ids, uint256 claimId) = _cashClaim();
 
-        vm.prank(sweep);
+        vm.prank(_sweep());
         debts.proveClaim(claimId);
 
         assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.PROVEN));
@@ -683,7 +681,7 @@ contract DebtLedgerTest is Fixture {
         // The coverage deadline outlives the settlement deadline, so by the time a claim dies of
         // never being attested the debt beneath it is already late.
         vm.warp(block.timestamp + SETTLEMENT_WINDOW);
-        vm.prank(sweep);
+        vm.prank(_sweep());
         debts.voidClaim(claimId);
 
         assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.VOIDED));
@@ -702,18 +700,18 @@ contract DebtLedgerTest is Fixture {
         vm.expectRevert(
             abi.encodeWithSelector(DebtLedger.ResponseWindowOpen.selector, claimId, deadline)
         );
-        vm.prank(sweep);
+        vm.prank(_sweep());
         debts.voidClaim(claimId);
     }
 
     function test_aTerminalClaimIsBeyondTheSweep() public {
         (, uint256 claimId) = _cashClaim();
 
-        vm.prank(sweep);
+        vm.prank(_sweep());
         debts.proveClaim(claimId);
 
         vm.expectRevert(abi.encodeWithSelector(DebtLedger.ClaimNotLive.selector, claimId));
-        vm.prank(sweep);
+        vm.prank(_sweep());
         debts.voidClaim(claimId);
     }
 
@@ -729,7 +727,7 @@ contract DebtLedgerTest is Fixture {
         assertFalse(debts.isDefaultable(ids[0]));
 
         vm.expectRevert(abi.encodeWithSelector(DebtLedger.NotDefaulted.selector, ids[0]));
-        vm.prank(pool);
+        vm.prank(_pool());
         debts.markDefaulted(ids[0]);
     }
 
@@ -747,7 +745,7 @@ contract DebtLedgerTest is Fixture {
 
         assertFalse(debts.isDefaultable(ids[0]));
         vm.expectRevert(abi.encodeWithSelector(DebtLedger.NotDefaulted.selector, ids[0]));
-        vm.prank(pool);
+        vm.prank(_pool());
         debts.markDefaulted(ids[0]);
     }
 
@@ -759,7 +757,7 @@ contract DebtLedgerTest is Fixture {
         vm.warp(block.timestamp + SETTLEMENT_WINDOW + 1);
         assertTrue(debts.isDefaultable(ids[0]));
 
-        vm.prank(pool);
+        vm.prank(_pool());
         debts.markDefaulted(ids[0]);
 
         assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.DEFAULTED));

@@ -4,28 +4,55 @@ pragma solidity 0.8.36;
 import {Test} from "forge-std/Test.sol";
 import {CreatorRegistry} from "../../src/identity/CreatorRegistry.sol";
 import {DebtLedger} from "../../src/debt/DebtLedger.sol";
+import {SweepRegistry} from "../../src/debt/SweepRegistry.sol";
 import {IDebtLedger} from "../../src/interfaces/IDebtLedger.sol";
+import {ISaleAuthorizer} from "../../src/interfaces/ISaleAuthorizer.sol";
 import {ItemLedger} from "../../src/items/ItemLedger.sol";
 import {PriceBook} from "../../src/items/PriceBook.sol";
 import {SaleGateway} from "../../src/sale/SaleGateway.sol";
 import {IProofVerifier} from "../../src/oracle/IProofVerifier.sol";
 import {StubProofVerifier} from "../../src/oracle/StubProofVerifier.sol";
+import {Allowance} from "../../src/treasury/Allowance.sol";
+import {MockNGN} from "../../src/treasury/MockNGN.sol";
+import {Pool} from "../../src/treasury/Pool.sol";
 import {ClaimCodes} from "../../src/libs/ClaimCodes.sol";
 import {Types} from "../../src/libs/Types.sol";
 import {MerkleBuilder} from "./MerkleBuilder.sol";
-import {MockAuthorizer} from "./MockAuthorizer.sol";
 
-/// @notice A deployed protocol with one creator, one consignment of thirteen items, a seeded price
-///         book and every payable party's account on file — the demo's opening state, and the
-///         ground every suite stands on.
+/// @notice The whole protocol, deployed and wired: one creator, one consignment of thirteen items, a
+///         seeded price book, every payable party's account on file, and a treasury whose ceiling is
+///         the real one. The demo's opening state, and the ground every suite stands on.
+///
+/// @dev The authorizer here is the shipped `Allowance`, not a double. A permissive authorizer must
+///      never exist in `src/`, and a deployment that tested against one would be testing a ceiling
+///      nobody is going to run. The one suite that needs to observe what the gateway *hands* the
+///      ceiling — the exposure, the rail — overrides `_saleAuthorizer` with a spy, which is the only
+///      thing a double is for.
 abstract contract Fixture is Test {
     uint32 internal constant SETTLEMENT_WINDOW = 3 minutes;
     uint32 internal constant CHALLENGE_WINDOW = 2 minutes;
     uint32 internal constant RESPONSE_WINDOW = 1 minutes;
+    uint32 internal constant COVERAGE_WINDOW = 5 minutes;
     uint32 internal constant FULFILMENT_WINDOW = 3 minutes;
     uint32 internal constant PRICE_EPOCH = 2 minutes;
     uint16 internal constant PENALTY_BPS = 100;
     uint32 internal constant ITEM_COUNT = 13;
+
+    /// @dev The economics, at their reference values: the allowance grows by 1% of proven settled
+    ///      value, a default costs five times what it defaulted on, and a write-off costs 1% of the
+    ///      list price on top of paying everyone as if the item had sold.
+    uint16 internal constant GROWTH_BPS = 100;
+    uint8 internal constant WRITE_DOWN_MULTIPLE = 5;
+    uint16 internal constant BURN_PENALTY_BPS = 100;
+
+    /// @notice The disclosed, unearned day-one capacity. Sized for the demo exactly as the design
+    ///         asks: a cash sale authorizes against it on the first morning, and one written-down
+    ///         default puts the next cash sale over the ceiling in front of the audience.
+    uint256 internal constant GENESIS_ALLOWANCE = 450_000e18;
+
+    /// @notice What the operator's funding account holds. It pays skims and, through a standing
+    ///         approval, the fees the protocol fines it.
+    uint256 internal constant OPERATOR_FUNDS = 5_000_000e18;
 
     /// @notice One sale, for the suites that mint debts through the ledger's own seam rather than
     ///         by selling an item. The price is item zero's, so the arithmetic matches the demo's.
@@ -57,8 +84,12 @@ abstract contract Fixture is Test {
     ItemLedger internal items;
     PriceBook internal prices;
     DebtLedger internal debts;
-    MockAuthorizer internal authorizer;
+    SweepRegistry internal sweep;
     StubProofVerifier internal proofs;
+    MockNGN internal ngn;
+    Allowance internal ceiling;
+    Pool internal pool;
+    ISaleAuthorizer internal authorizer;
     SaleGateway internal gateway;
 
     uint256 internal creatorId;
@@ -77,6 +108,9 @@ abstract contract Fixture is Test {
         (creator, creatorKey) = makeAddrAndKey("creator");
         (forger, forgerKey) = makeAddrAndKey("forger");
 
+        // Deployment order is a dependency order: the verifier before the ledger that holds it, the
+        // ledger before the sweep that reads it, the allowance before the pool that writes it down,
+        // and the gateway last, because it is the only thing that touches everything.
         registry = new CreatorRegistry(operator);
         items = new ItemLedger(operator, registry);
         prices = new PriceBook(items, registry, PRICE_EPOCH);
@@ -84,7 +118,12 @@ abstract contract Fixture is Test {
         debts = new DebtLedger(
             operator, proofs, SETTLEMENT_WINDOW, CHALLENGE_WINDOW, RESPONSE_WINDOW, PENALTY_BPS
         );
-        authorizer = new MockAuthorizer();
+        sweep = new SweepRegistry(operator, debts, COVERAGE_WINDOW);
+        ngn = new MockNGN(operator);
+        ceiling =
+            new Allowance(operator, debts, _genesisAllowance(), GROWTH_BPS, WRITE_DOWN_MULTIPLE);
+        pool = new Pool(operator, ngn, CURRENCY, debts, ceiling);
+        authorizer = _saleAuthorizer();
         gateway = new SaleGateway(
             operator,
             treasury,
@@ -93,19 +132,30 @@ abstract contract Fixture is Test {
             prices,
             debts,
             authorizer,
+            pool,
             SaleGateway.Splits({
                 creatorBps: CREATOR_BPS,
                 landlordBps: LANDLORD_BPS,
                 communityBps: COMMUNITY_BPS,
                 operatorBps: OPERATOR_BPS
             }),
+            BURN_PENALTY_BPS,
             FULFILMENT_WINDOW
         );
 
         vm.startPrank(operator);
         items.setSaleGateway(address(gateway));
         debts.setSaleGateway(address(gateway));
+        debts.setPool(address(pool));
+        debts.setSweepRegistry(address(sweep));
+        ceiling.setPool(address(pool));
+        pool.setSaleGateway(address(gateway));
         creatorId = registry.register(creator);
+
+        // The operator's funding account, and the standing approval the pool collects its fees
+        // against. A fine that had to be volunteered by the party being fined is not a fine.
+        ngn.mint(operator, OPERATOR_FUNDS);
+        ngn.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 
         // Every party who can be owed money says where they are to be paid, in their own name.
@@ -128,6 +178,24 @@ abstract contract Fixture is Test {
 
         vm.prank(creator);
         prices.seed(trancheId, itemIds, itemPrices);
+    }
+
+    /// @notice The day-one capacity this deployment opens with. Overridden by the suites that work
+    ///         the ceiling's own arithmetic, where the number is the experiment.
+    function _genesisAllowance() internal view virtual returns (uint256) {
+        return GENESIS_ALLOWANCE;
+    }
+
+    /// @notice What the gateway asks for permission to sell. The real ceiling, unless a suite is
+    ///         specifically watching what the gateway asks it.
+    function _saleAuthorizer() internal virtual returns (ISaleAuthorizer) {
+        return ceiling;
+    }
+
+    /// @notice Money into the pool, as the skim of a sale.
+    function _fundPool(uint256 amount) internal {
+        vm.prank(operator);
+        pool.depositSkim(SALE_REF, amount);
     }
 
     function _accountHash(address who) internal pure returns (bytes32) {
@@ -233,6 +301,19 @@ abstract contract Fixture is Test {
         input = _input(index);
         input.communityRecipient = communityMember;
         input.communityVoucherHash = keccak256(abi.encode("community-voucher", itemIds[index]));
+    }
+
+    /// @notice A write-off of item `index`, with its evidence committed by hash.
+    function _writeOff(uint256 index) internal view returns (SaleGateway.WriteOff memory) {
+        CreatorRegistry.ItemVoucher memory voucher = _voucher(itemIds[index]);
+        return SaleGateway.WriteOff({
+            voucher: voucher,
+            signature: _sign(voucher, creatorKey),
+            trancheId: trancheId,
+            proof: MerkleBuilder.proof(leaves, index),
+            evidenceHash: keccak256(abi.encode("water-damage-report", itemIds[index])),
+            storagePointer: keccak256(abi.encode("storage-root", itemIds[index]))
+        });
     }
 
     function _legs(uint256 price, bool hasCommunity)

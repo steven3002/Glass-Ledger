@@ -104,6 +104,13 @@ contract DebtLedger is IDebtLedger, EIP712 {
     /// @notice Penalties owed to a wronged recipient, per currency. Paid at the treasury.
     mapping(address recipient => mapping(bytes32 currency => uint256)) public penaltyOwed;
 
+    /// @notice The same penalties, totalled per currency.
+    /// @dev A mapping cannot be summed, and the ceiling has to count what the operator owes in fines
+    ///      the same way it counts what the operator owes in debts — so the total is kept here, where
+    ///      the fine is created, rather than reconstructed by anyone downstream. The treasury reads
+    ///      this; nothing in this contract reads the treasury.
+    mapping(bytes32 currency => uint256) public recipientPenaltyOwed;
+
     /// @notice Penalties owed to the pool, per currency.
     mapping(bytes32 currency => uint256) public poolPenaltyOwed;
 
@@ -708,6 +715,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
         uint256[] storage debtIds = _claimDebts[claimId];
         bytes32 currency = claim_.currency;
         uint256 totalPenalty;
+        uint256 toRecipients;
 
         for (uint256 i = 0; i < debtIds.length; ++i) {
             uint256 debtId = debtIds[i];
@@ -719,6 +727,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
 
             penaltyOwed[record.recipient][currency] += toRecipient;
             poolPenaltyOwed[currency] += toPool;
+            toRecipients += toRecipient;
             totalPenalty += penalty;
 
             record.claimId = 0;
@@ -727,6 +736,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
             emit PenaltyAccrued(claimId, record.recipient, currency, toRecipient, toPool);
         }
 
+        recipientPenaltyOwed[currency] += toRecipients;
         claim_.state = Types.ClaimState.VOIDED;
         emit ClaimVoided(claimId, rate, totalPenalty);
     }

@@ -9,25 +9,9 @@ import {Types} from "../src/libs/Types.sol";
 import {Fixture} from "./utils/Fixture.sol";
 
 contract SweepRegistryTest is Fixture {
-    uint32 internal constant COVERAGE_WINDOW = 5 minutes;
-
     bytes internal constant EVIDENCE = hex"c0ffee";
     bytes internal constant PROOF = hex"c0ffee";
     bytes32 internal constant POINTER = keccak256("storage-root-of-the-attestation-blob");
-
-    address internal pool;
-    SweepRegistry internal sweep;
-
-    function setUp() public override {
-        super.setUp();
-        pool = makeAddr("pool");
-        sweep = new SweepRegistry(operator, debts, COVERAGE_WINDOW);
-
-        vm.startPrank(operator);
-        debts.setPool(pool);
-        debts.setSweepRegistry(address(sweep));
-        vm.stopPrank();
-    }
 
     // --- Helpers ---
 
@@ -45,37 +29,6 @@ contract SweepRegistryTest is Fixture {
     function _setVerdictFor(IProofVerifier.Statement memory statement) internal {
         vm.prank(operator);
         proofs.setVerdict(statement, true);
-    }
-
-    /// @notice A deployment in which a claim's coverage deadline falls while the operator still has
-    ///         time to answer a challenge — the one arrangement in which the two clocks collide.
-    /// @dev Not reachable with the protocol's own parameters (challenge + response is well inside
-    ///      the coverage window, in the demo profile and the production one alike). Built here on
-    ///      purpose, because a guard is only load-bearing if something can push against it.
-    function _ledgerWhereCoverageOutpacesTheResponse()
-        internal
-        returns (DebtLedger ledger, SweepRegistry registry_, uint256 claimId)
-    {
-        ledger = new DebtLedger(
-            operator, proofs, SETTLEMENT_WINDOW, CHALLENGE_WINDOW, 5 minutes, PENALTY_BPS
-        );
-        registry_ = new SweepRegistry(operator, ledger, 3 minutes);
-
-        vm.startPrank(operator);
-        ledger.setSaleGateway(address(this));
-        ledger.setSweepRegistry(address(registry_));
-        vm.stopPrank();
-
-        vm.prank(creator);
-        ledger.setAccountHash(CURRENCY, _accountHash(creator));
-
-        IDebtLedger.Leg[] memory legs = new IDebtLedger.Leg[](1);
-        legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, SALE_PRICE);
-        uint256[] memory ids =
-            ledger.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
-
-        vm.prank(operator);
-        claimId = ledger.postClaim(ids, CLAIM_REF);
     }
 
     // --- Wiring ---
@@ -99,6 +52,47 @@ contract SweepRegistryTest is Fixture {
 
         vm.expectRevert(SweepRegistry.InvalidWindow.selector);
         new SweepRegistry(operator, debts, 0);
+    }
+
+    /// @notice The backstop cannot be configured to fire before the machinery it backs has finished.
+    /// @dev A claim can be challenged at the last second of its challenge window, and the operator
+    ///      then has its whole response window to answer — so `challenge + response` is the earliest
+    ///      the question can be *finally* settled on its merits. A coverage window shorter than that
+    ///      does not make the protocol unsafe (the ledger refuses to void a claim whose response
+    ///      window is still live) but it makes the deployment's own parameter a lie: the effective
+    ///      deadline silently becomes the response window's close. A deployment states its windows
+    ///      honestly or it does not deploy.
+    function test_aSweepCannotBackstopAWindowLongerThanItself() public {
+        uint32 minimum = CHALLENGE_WINDOW + RESPONSE_WINDOW;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                SweepRegistry.CoverageWindowTooShort.selector, minimum - 1, minimum
+            )
+        );
+        new SweepRegistry(operator, debts, minimum - 1);
+
+        // Exactly enough is enough: the two deadlines may coincide, they may never cross.
+        SweepRegistry tight = new SweepRegistry(operator, debts, minimum);
+        assertEq(tight.coverageWindow(), minimum);
+    }
+
+    /// @notice With the constraint enforced, the two clocks cannot collide — at any challenge time.
+    /// @dev The property the constructor buys, stated as arithmetic and fuzzed over the only degree
+    ///      of freedom anyone has: *when* the recipient challenges. Whatever second they pick inside
+    ///      their window, the coverage deadline still falls no earlier than the operator's response
+    ///      deadline, so a lapse can never take away a response window that is still running.
+    function testFuzz_theCoverageDeadlineNeverPrecedesTheResponseDeadline(uint32 delay) public {
+        delay = uint32(bound(delay, 0, CHALLENGE_WINDOW));
+
+        (, uint256 claimId) = _cashClaim();
+        uint64 coverageDeadline = sweep.coverageDeadline(claimId);
+
+        vm.warp(block.timestamp + delay);
+        vm.prank(creator);
+        debts.challenge(claimId);
+
+        assertGe(coverageDeadline, debts.claim(claimId).responseDeadline);
     }
 
     function test_onlyTheOperatorAttests() public {
@@ -422,18 +416,47 @@ contract SweepRegistryTest is Fixture {
 
         // The settlement deadline is long past, so the debt is in default the instant it returns.
         assertTrue(debts.isDefaultable(ids[0]));
-        vm.prank(pool);
+        vm.prank(address(pool));
         debts.markDefaulted(ids[0]);
         assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.DEFAULTED));
     }
 
-    /// @dev The economics the ratchet rests on. One proof spans a whole period, so the number that
-    ///      matters is not what a sweep costs but what a *claim* costs inside one — and a claim
-    ///      costs the state it changes: three debts moved to proven, and the evidence written once
-    ///      for all of them. Measured, not asserted; the bound is a regression guard, not a target.
+    /// @dev The economics the ratchet rests on, and the sentence it has to survive: *one proof spans
+    ///      thousands of debts for pennies*. That is true of the **proof** and false of everything
+    ///      else, so the two have to be measured apart rather than averaged together — an average over
+    ///      a big enough batch would hide any per-claim cost at all, however large, and would keep on
+    ///      reassuring us right up to the point where a real sweep ran out of block.
+    ///
+    ///      Two batch sizes, one subtraction. What the extra ten claims cost is the *marginal* price of
+    ///      covering a claim — the state it changes, three debts moved to proven — and what remains is
+    ///      the fixed price of the attestation itself, which is the part a batch amortizes. The bounds
+    ///      are regression guards, not targets; the numbers themselves are printed, because the gas
+    ///      table quotes this and a quoted number nobody can reproduce is a slogan.
     function test_aSweepCostsWhatItsClaimsCostAndNotMore() public {
-        uint256[] memory claimIds = new uint256[](10);
-        for (uint256 i = 0; i < claimIds.length; ++i) {
+        uint256 one = _attestationGas(1);
+        uint256 eleven = _attestationGas(11);
+
+        uint256 marginal = (eleven - one) / 10;
+        uint256 fixedCost = one - marginal;
+
+        emit log_named_uint("attestation, fixed (the proof)", fixedCost);
+        emit log_named_uint("gas per covered claim (3 debts)", marginal);
+
+        // The marginal number is the one with a ceiling behind it: a sweep covering a thousand claims
+        // has to fit in a block, and this is what decides whether it does. The fixed number is the one
+        // the batch is allowed to amortize, and it is bounded only so that it cannot quietly grow into
+        // the other one's territory.
+        assertLt(marginal, 75_000);
+        assertLt(fixedCost, 125_000);
+    }
+
+    /// @dev One attestation over `count` claims, each of them coverable, measured from inside the EVM.
+    ///      The intrinsic cost of a transaction (21,000 gas) and the calldata carrying the ids are not
+    ///      in this number — the first cancels in the subtraction above and the second adds a few
+    ///      hundred gas per id on a real transaction, which the gas table says out loud.
+    function _attestationGas(uint256 count) internal returns (uint256) {
+        uint256[] memory claimIds = new uint256[](count);
+        for (uint256 i = 0; i < count; ++i) {
             (, claimIds[i]) = _cashClaim();
             _setVerdict(claimIds[i], true);
         }
@@ -443,43 +466,40 @@ contract SweepRegistryTest is Fixture {
         sweep.attest(claimIds, EVIDENCE, POINTER);
         uint256 used = before - gasleft();
 
-        emit log_named_uint("gas per covered claim (3 debts)", used / claimIds.length);
-        assertLt(used / claimIds.length, 75_000);
-
-        for (uint256 i = 0; i < claimIds.length; ++i) {
+        for (uint256 i = 0; i < count; ++i) {
             assertEq(uint8(debts.claim(claimIds[i]).state), uint8(Types.ClaimState.PROVEN));
         }
+
+        return used;
     }
 
-    /// @dev Two deadlines, and neither shortcuts the other. A challenged claim whose response window
-    ///      is still running is not void, whatever the coverage clock says — the operator's own
-    ///      clock has not run out, and the protocol never takes back a window it granted.
-    function test_theCoverageDeadlineNeverShortcutsTheOperatorsOwnClock() public {
-        (DebtLedger ledger, SweepRegistry registry_, uint256 claimId) =
-            _ledgerWhereCoverageOutpacesTheResponse();
+    /// @notice The coverage deadline waits for the operator's own clock, and then does not forgive it.
+    /// @dev The other half of the constructor's constraint, from the claim's side. A challenged claim
+    ///      that the operator never answered can be killed immediately by `voidChallenged` — but
+    ///      nobody has to. If every recipient goes back to sleep after challenging, the claim still
+    ///      dies, at its coverage deadline, on a stranger's touch. Two independent tests, and the
+    ///      claim must survive both.
+    ///
+    ///      The ledger's guard against the reverse case (a lapse taking away a response window that
+    ///      is still running) is now unreachable through this contract, because the constructor makes
+    ///      the deployment that would reach it unbuildable. It stays as the second wall, and
+    ///      `DebtLedger`'s own suite still pushes on it directly.
+    function test_aChallengedClaimNobodyFinishedOffStillDiesAtCoverage() public {
+        (uint256[] memory ids, uint256 claimId) = _cashClaim();
 
-        vm.warp(block.timestamp + 1 minutes);
         vm.prank(creator);
-        ledger.challenge(claimId);
+        debts.challenge(claimId);
 
-        uint64 responseDeadline = ledger.claim(claimId).responseDeadline;
-        uint64 coverageDeadline = registry_.coverageDeadline(claimId);
-        assertGt(responseDeadline, coverageDeadline);
+        uint64 responseDeadline = debts.claim(claimId).responseDeadline;
+        uint64 coverageDeadline = sweep.coverageDeadline(claimId);
+        assertGt(coverageDeadline, responseDeadline);
 
         vm.warp(coverageDeadline + 1);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                DebtLedger.ResponseWindowOpen.selector, claimId, responseDeadline
-            )
-        );
         vm.prank(stranger);
-        registry_.touch(claimId);
+        sweep.touch(claimId);
 
-        // Once the operator's window has closed too, the claim dies on the same permissionless
-        // touch — the coverage deadline waited for it, and did not forgive it.
-        vm.warp(responseDeadline + 1);
-        vm.prank(stranger);
-        registry_.touch(claimId);
-        assertEq(uint8(ledger.claim(claimId).state), uint8(Types.ClaimState.VOIDED));
+        assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.VOIDED));
+        assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.AGING));
+        assertTrue(debts.isDefaultable(ids[0]));
     }
 }

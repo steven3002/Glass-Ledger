@@ -10,8 +10,17 @@ import {SaleGateway} from "../src/sale/SaleGateway.sol";
 import {Types} from "../src/libs/Types.sol";
 import {Fixture} from "./utils/Fixture.sol";
 import {MerkleBuilder} from "./utils/MerkleBuilder.sol";
+import {MockAuthorizer} from "./utils/MockAuthorizer.sol";
 
+/// @notice The fusion, and what it hands the ceiling.
+/// @dev The one suite that does not run against the real `Allowance`. What is under test here is the
+///      *call*: the exposure a sale declares, the rail it declares it on, and the fact that a refusal
+///      unwinds everything. A spy answers those questions and a real ceiling cannot — it would only
+///      say yes, and yes is what every ceiling says until the day it does not. The ceiling's own
+///      arithmetic is tested against the ceiling, in `Ceiling.t.sol`.
 contract SaleGatewayTest is Fixture {
+    MockAuthorizer internal spy;
+
     uint256 internal itemId;
     uint256 internal price;
     uint64 internal anchor;
@@ -41,6 +50,12 @@ contract SaleGatewayTest is Fixture {
         itemId = itemIds[0];
         price = itemPrices[0];
         anchor = items.tranche(trancheId).postedAt;
+    }
+
+    /// @inheritdoc Fixture
+    function _saleAuthorizer() internal override returns (ISaleAuthorizer) {
+        spy = new MockAuthorizer();
+        return spy;
     }
 
     // --- The fusion ---
@@ -85,9 +100,9 @@ contract SaleGatewayTest is Fixture {
 
         // The rail paid the recipients directly, so the operator holds nobody's money.
         assertEq(debts.outstanding(), 0);
-        assertEq(authorizer.calls(), 1);
-        assertEq(authorizer.lastExposure(), creatorAmount + landlordAmount);
-        assertEq(uint8(authorizer.lastRail()), uint8(Types.Rail.INSTANT));
+        assertEq(spy.calls(), 1);
+        assertEq(spy.lastExposure(), creatorAmount + landlordAmount);
+        assertEq(uint8(spy.lastRail()), uint8(Types.Rail.INSTANT));
     }
 
     function test_aCommunityVoucherMintsTheFourthLeg() public {
@@ -109,7 +124,7 @@ contract SaleGatewayTest is Fixture {
         assertEq(debts.debt(debtIds[3]).amount, operatorAmount);
 
         assertEq(creatorAmount + landlordAmount + communityAmount + operatorAmount, price);
-        assertEq(authorizer.lastExposure(), creatorAmount + landlordAmount + communityAmount);
+        assertEq(spy.lastExposure(), creatorAmount + landlordAmount + communityAmount);
     }
 
     /// @dev A cash sale is the operator holding other people's money. The ledger says so from the
@@ -123,7 +138,7 @@ contract SaleGatewayTest is Fixture {
         assertEq(uint8(debts.debt(debtIds[0]).state), uint8(Types.DebtState.AGING));
         assertEq(debts.debt(debtIds[0]).deadline, uint64(block.timestamp) + SETTLEMENT_WINDOW);
         assertEq(debts.outstanding(), price * 8750 / 10_000);
-        assertEq(uint8(authorizer.lastRail()), uint8(Types.Rail.CUSTODY));
+        assertEq(uint8(spy.lastRail()), uint8(Types.Rail.CUSTODY));
     }
 
     /// @dev Every beneficiary's leg floors and the remainder lands in the operator's, so the
@@ -236,7 +251,7 @@ contract SaleGatewayTest is Fixture {
     function test_aRefusedCeilingLeavesNothingBehind() public {
         SaleGateway.SaleInput memory input = _input(0);
         (uint256 creatorAmount, uint256 landlordAmount,,) = _legs(price, false);
-        authorizer.setRejects(true);
+        spy.setRejects(true);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -310,8 +325,8 @@ contract SaleGatewayTest is Fixture {
 
         // The operator is holding a stranger's whole payment: that is the exposure, not the split.
         assertEq(debts.outstanding(), price);
-        assertEq(authorizer.lastExposure(), price);
-        assertEq(uint8(authorizer.lastRail()), uint8(Types.Rail.CUSTODY));
+        assertEq(spy.lastExposure(), price);
+        assertEq(uint8(spy.lastRail()), uint8(Types.Rail.CUSTODY));
     }
 
     /// @dev A buyer is charged what they were shown. A repricing that matures while their order is

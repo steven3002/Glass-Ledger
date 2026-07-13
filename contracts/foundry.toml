@@ -15,6 +15,11 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
 ]
 
+# The deployment script publishes its addresses to artifacts/deployments/<chainid>.json, which is
+# where the relayer and the web read them from. That is the only path any script may write to: a
+# deployment writes down where it put things, and nothing else on this machine is its business.
+fs_permissions = [{access = "read-write", path = "../artifacts"}]
+
 # Deployment builds: identical language/EVM target, deeper optimization.
 # Demo and production runs must never diverge in code shape — window and economic
 # parameters are constructor arguments, not compile-time switches.

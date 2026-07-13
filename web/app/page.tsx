@@ -3,43 +3,61 @@ import Link from "next/link";
 const surfaces = [
   {
     href: "/ledger",
-    name: "Ledger",
-    description:
-      "The public ledger: items, debts and their ages, pool and ceiling state — read entirely from chain over public RPC.",
+    name: "The ledger",
+    line: "Everything the shop owes, and to whom, and for how long it has owed it.",
+    body:
+      "Items and their states. Debts with their ages ticking. The pool, the allowance, and the ceiling " +
+      "that closes the till when Good is holding more of other people's money than it has earned the " +
+      "right to hold. Read from the chain, by this page, over a public connection anyone can use.",
   },
   {
     href: "/buy",
     name: "Buy",
-    description:
-      "Scan a tag, verify it against the chain, buy, and redeem the ownership certificate with a claim code.",
+    line: "Check a dress before you pay for it — without asking the shop anything.",
+    body:
+      "Scan the tag. Your browser fetches the creator's signed voucher from public storage, recovers " +
+      "her signature, walks the consignment's proof, and reads whether the item has already been sold. " +
+      "Genuine, forged, or a copy of something already gone: you find out, not the shop.",
   },
   {
     href: "/creator",
-    name: "Creator",
-    description:
-      "The consignment view: tagged items with their Merkle membership shown against the posted tranche root.",
+    name: "The tags",
+    line: "The whole consignment on one wall — with one forgery and one clone among them.",
+    body:
+      "Every tag the creator signed, each verifying live against the root the chain holds. Plus a " +
+      "forged tag, signed in your browser by a key nobody registered, and a clone of one already sold. " +
+      "They look identical. They are not, and you can prove which is which without permission.",
   },
 ];
 
 export default function Home() {
   return (
-    <main className="mx-auto flex max-w-2xl flex-1 flex-col justify-center gap-8 p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Glass Ledger</h1>
-        <p className="mt-2 text-sm opacity-70">
-          Every guarantee on these pages is read from the chain, never from an
-          operator&apos;s server.
-        </p>
-      </div>
-      <ul className="flex flex-col gap-4">
-        {surfaces.map((s) => (
-          <li key={s.href}>
+    <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-16">
+      <h1 className="text-4xl font-semibold tracking-tight">A shop you do not have to trust.</h1>
+      <p className="mt-4 max-w-2xl leading-relaxed text-neutral-400">
+        A creator consigns a dress. It sells. Four people are owed money in the same second, and every
+        one of those debts is on a clock that only runs one way — toward a default that anybody in the
+        world can collect, without filing anything, without accusing anybody, and without the shop&rsquo;s
+        cooperation.
+      </p>
+      <p className="mt-3 max-w-2xl leading-relaxed text-neutral-400">
+        Every page here reads the chain directly. Switch the shop off — the demo does, on purpose — and
+        the tags still verify, the clocks still run, and the ledger still answers. The only thing that
+        stops is the till.
+      </p>
+
+      <ul className="mt-12 grid gap-4">
+        {surfaces.map((surface) => (
+          <li key={surface.href}>
             <Link
-              href={s.href}
-              className="block rounded-lg border border-black/10 p-4 transition-colors hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5"
+              href={surface.href}
+              className="block rounded-xl border border-neutral-800 bg-neutral-950/60 p-6 transition-colors hover:border-neutral-700 hover:bg-neutral-900/60"
             >
-              <span className="font-medium">{s.name}</span>
-              <p className="mt-1 text-sm opacity-70">{s.description}</p>
+              <div className="flex flex-wrap items-baseline gap-x-3">
+                <span className="text-lg font-semibold">{surface.name}</span>
+                <span className="text-sm text-neutral-400">{surface.line}</span>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-neutral-500">{surface.body}</p>
             </Link>
           </li>
         ))}

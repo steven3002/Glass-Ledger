@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync": "node scripts/sync-artifacts.mjs",
+    "predev": "npm run sync",
     "dev": "next dev",
+    "prebuild": "npm run sync",
     "build": "next build",
     "start": "next start",
+    "prelint": "npm run sync",
     "lint": "eslint"
   },
   "dependencies": {
+    "@0gfoundation/0g-storage-ts-sdk": "1.2.10",
     "@zxing/browser": "0.2.1",
     "@zxing/library": "0.23.0",
     "next": "16.2.10",
