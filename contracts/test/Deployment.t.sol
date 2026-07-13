@@ -67,7 +67,16 @@ contract DeploymentTest is Test, Deploy {
         // The ceiling the gateway asks is the ceiling the pool writes down.
         assertEq(address(d.gateway.authorizer()), address(d.ceiling));
         assertEq(address(d.gateway.writeOffs()), address(d.pool));
-        assertEq(d.ceiling.allowance(), d.ceiling.genesisAllowance());
+
+        // A relationship nobody has opened yet still stands at its threshold — that is what a genesis
+        // grant *is*, and it is granted to the relationship rather than held centrally. Any creator,
+        // even one who has never been registered, reads the same number.
+        assertEq(d.ceiling.allowanceOf(1), d.ceiling.genesisAllowance());
+        assertEq(d.ceiling.allowanceOf(999), d.ceiling.genesisAllowance());
+
+        // And the network extends its unearned faith exactly **once**, not once per creator. This is
+        // the line that stops an operator printing capacity by registering counterparties.
+        assertEq(d.ceiling.totalAllowance(), d.ceiling.genesisAllowance());
     }
 
     /// @notice The demo and production profiles differ in their numbers and in nothing else.

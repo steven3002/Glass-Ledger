@@ -101,7 +101,9 @@ contract DebtLedgerTest is Fixture {
     function test_onlyTheGatewayMints() public {
         vm.expectRevert(DebtLedger.NotGateway.selector);
         vm.prank(operator);
-        debts.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, CURRENCY, _saleLegs(), bytes32(0));
+        debts.mintSaleDebts(
+            SALE_REF, CREATOR_ID, Types.Rail.CUSTODY, CURRENCY, _saleLegs(), bytes32(0)
+        );
     }
 
     // --- Where a recipient is paid ---
@@ -136,8 +138,9 @@ contract DebtLedgerTest is Fixture {
         legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, stranger, 1e18);
 
         vm.prank(address(gateway));
-        uint256[] memory ids =
-            debts.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
+        uint256[] memory ids = debts.mintSaleDebts(
+            SALE_REF, CREATOR_ID, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0)
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(DebtLedger.NoAccountOnFile.selector, stranger, CURRENCY)
@@ -225,7 +228,7 @@ contract DebtLedgerTest is Fixture {
 
         vm.prank(address(gateway));
         uint256[] memory usd =
-            debts.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, usdTag, legs, bytes32(0));
+            debts.mintSaleDebts(SALE_REF, CREATOR_ID, Types.Rail.CUSTODY, usdTag, legs, bytes32(0));
 
         uint256[] memory mixed = new uint256[](2);
         mixed[0] = ngn[0];
@@ -400,8 +403,9 @@ contract DebtLedgerTest is Fixture {
 
         IDebtLedger.Leg[] memory legs = new IDebtLedger.Leg[](1);
         legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, SALE_PRICE);
-        uint256[] memory ids =
-            other.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
+        uint256[] memory ids = other.mintSaleDebts(
+            SALE_REF, CREATOR_ID, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0)
+        );
 
         vm.prank(operator);
         uint256 twin = other.postClaim(ids, CLAIM_REF);
@@ -614,8 +618,9 @@ contract DebtLedgerTest is Fixture {
         legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, 1e18);
 
         vm.prank(address(gateway));
-        uint256[] memory ids =
-            debts.mintSaleDebts(SALE_REF, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
+        uint256[] memory ids = debts.mintSaleDebts(
+            SALE_REF, CREATOR_ID, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0)
+        );
 
         vm.prank(operator);
         uint256 claimId = debts.postClaim(ids, CLAIM_REF);
@@ -770,7 +775,8 @@ contract DebtLedgerTest is Fixture {
         uint64 deadline = uint64(block.timestamp) + FULFILMENT_WINDOW;
 
         vm.prank(address(gateway));
-        uint256 id = debts.mintObligation(SALE_REF, buyer, SALE_PRICE, CURRENCY, deadline);
+        uint256 id =
+            debts.mintObligation(SALE_REF, CREATOR_ID, buyer, SALE_PRICE, CURRENCY, deadline);
 
         IDebtLedger.Debt memory owed = debts.debt(id);
         assertEq(uint8(owed.role), uint8(Types.Role.BUYER));
@@ -796,7 +802,12 @@ contract DebtLedgerTest is Fixture {
     function test_anObligationIsDischargedOnce() public {
         vm.prank(address(gateway));
         uint256 id = debts.mintObligation(
-            SALE_REF, buyer, SALE_PRICE, CURRENCY, uint64(block.timestamp) + FULFILMENT_WINDOW
+            SALE_REF,
+            CREATOR_ID,
+            buyer,
+            SALE_PRICE,
+            CURRENCY,
+            uint64(block.timestamp) + FULFILMENT_WINDOW
         );
 
         vm.prank(address(gateway));

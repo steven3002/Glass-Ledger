@@ -174,6 +174,95 @@ export default function LedgerPage() {
         )}
       </Panel>
 
+      {/* Capacity is a property of a relationship, so there is no single number to show — and printing
+          one would be printing an average of two answers, neither of which is true. */}
+      <Panel
+        title="What Good may hold, creator by creator"
+        hint="Capacity is earned with a creator and spendable only on that creator's goods. Good can have an open till with one and a shut one with another, at the same moment."
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-md border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-neutral-800 text-left text-xs uppercase tracking-wider text-neutral-600">
+                <th className="py-2 pr-4 font-medium">Creator</th>
+                <th className="py-2 pr-4 text-right font-medium">Allowance</th>
+                <th className="py-2 pr-4 text-right font-medium">Of hers, being held</th>
+                <th className="py-2 text-right font-medium">Headroom</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.capacity.map((row) => (
+                <tr key={String(row.creatorId)} className="border-b border-neutral-900 last:border-0">
+                  <td className="py-2.5 pr-4 text-neutral-300">creator #{String(row.creatorId)}</td>
+                  <td className="py-2.5 pr-4 text-right font-mono text-neutral-300">{naira(row.allowance)}</td>
+                  <td className="py-2.5 pr-4 text-right font-mono text-neutral-400">{naira(row.outstanding)}</td>
+                  <td
+                    className={`py-2.5 text-right font-mono ${
+                      row.headroom === 0n ? "text-red-300" : "text-emerald-300"
+                    }`}
+                  >
+                    {naira(row.headroom)}
+                    {row.headroom === 0n && <span className="ml-2 text-xs text-red-400">shut</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-4 text-sm leading-relaxed text-neutral-400">
+          Trust here is not a score Good holds. It is a thing Good has <em>with somebody</em>, and it
+          cannot be moved between them. An operator can manufacture a creator, trade with her, pay
+          himself, prove every payment — and every naira of the reputation he earns that way is spendable
+          only on the goods of a person who does not exist.
+        </p>
+      </Panel>
+
+      {/* The one global number, and it is a rap sheet. See FailureRecord in lib/ledger. */}
+      <Panel
+        title="Good's record"
+        hint="This is not a score. It is what Good has broken and what Good owes."
+        tone={snapshot.record.defaults > 0n || snapshot.record.claimsVoided > 0n ? "alarm" : "plain"}
+      >
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Defaults"
+            value={String(snapshot.record.defaults)}
+            tone={snapshot.record.defaults > 0n ? "alarm" : "plain"}
+            note={`${naira(snapshot.record.defaultValue)} of other people's money Good did not pay`}
+          />
+          <Stat
+            label="Claims voided"
+            value={String(snapshot.record.claimsVoided)}
+            tone={snapshot.record.claimsVoided > 0n ? "alarm" : "plain"}
+            note="payments Good asserted and could not sustain"
+          />
+          <Stat
+            label="Owed to the pool"
+            value={naira(snapshot.record.owedToPool)}
+            tone={snapshot.record.owedToPool > 0n ? "alarm" : "plain"}
+            note="what the fund paid out on Good's behalf and has not got back"
+          />
+          <Stat
+            label="Unpaid fines"
+            value={naira(snapshot.record.penaltiesUnpaid)}
+            tone={snapshot.record.penaltiesUnpaid > 0n ? "alarm" : "plain"}
+            note="charged, public, and still owed"
+          />
+        </div>
+
+        <p className="mt-5 text-sm leading-relaxed text-neutral-400">
+          There is no rating here, no average, and above all no <em>rate</em> — because a rate has a
+          denominator, and a denominator is exactly what an operator with a Sybil budget manufactures.
+          &ldquo;Two defaults in ten thousand sales&rdquo; is a number anybody can buy: sell to yourself
+          nine thousand times and watch your failure rate fall. Every figure above is an absolute count or
+          amount, and every one of them only ever moves in the direction that is bad for Good.{" "}
+          <strong className="font-semibold text-neutral-300">
+            You cannot farm a clean record. You can only fail to have failed.
+          </strong>
+        </p>
+      </Panel>
+
       {snapshot.writeOffs.map((burn) => (
         <Panel
           key={String(burn.itemId)}

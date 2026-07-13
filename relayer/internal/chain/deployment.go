@@ -3,7 +3,9 @@ package chain
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
+	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +34,26 @@ type Deployment struct {
 	Ceiling  common.Address `json:"ceiling"`
 	Pool     common.Address `json:"pool"`
 	Gateway  common.Address `json:"gateway"`
+}
+
+// DeploymentPath is where the deployment script published the addresses for a chain.
+//
+// One derivation, and every process that has to find a deployment calls it. There were three, once —
+// the demo, the operator's service and the gas table each worked it out for themselves — and when the
+// addresses moved to one file per chain, the correction was made in one of them. The operator's service
+// kept the old answer, came up on testnet with its till bound to the closed handler, said so once in a
+// log line nobody was reading, and served a whole rehearsal without a counter. A rule that lives in
+// three places is a rule that is true in two of them.
+//
+// The deployments directory is deliberately not derived from the data directory. The shelf is per-chain
+// — a consignment belongs to the deployment that posted it, and a local run must not be able to seed
+// over the testnet's paperwork — and the deployments directory is not, so walking up from one to reach
+// the other finds the wrong place the moment the shelf moves.
+func DeploymentPath(explicit, dir string, chainID *big.Int) string {
+	if explicit != "" {
+		return explicit
+	}
+	return filepath.Join(dir, chainID.String()+".json")
 }
 
 // LoadDeployment reads the addresses the deployment script published.

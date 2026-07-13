@@ -208,7 +208,9 @@ contract BurnTest is Fixture {
         pool.touch(debtIds[0]);
 
         assertEq(ngn.balanceOf(creator), CREATOR_PAID);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE - WRITE_DOWN_MULTIPLE * CREATOR_PAID);
+        assertEq(
+            ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE - WRITE_DOWN_MULTIPLE * CREATOR_PAID
+        );
         assertTrue(ceiling.frozen());
     }
 
@@ -356,7 +358,9 @@ contract BurnAtAClosedTillTest is Fixture {
         // Nothing can be sold for cash. The till is shut.
         SaleGateway.SaleInput memory sale = _inputWithCommunity(1);
         (uint256 c, uint256 l, uint256 m,) = _legs(itemPrices[1], true);
-        vm.expectRevert(abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, c + l + m, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, CREATOR_ID, c + l + m, 0)
+        );
         vm.prank(operator);
         gateway.sellCash(sale);
 

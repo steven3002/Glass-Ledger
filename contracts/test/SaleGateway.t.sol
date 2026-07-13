@@ -255,7 +255,7 @@ contract SaleGatewayTest is Fixture {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                ISaleAuthorizer.OverCeiling.selector, creatorAmount + landlordAmount, 0
+                ISaleAuthorizer.OverCeiling.selector, CREATOR_ID, creatorAmount + landlordAmount, 0
             )
         );
         vm.prank(operator);
@@ -485,7 +485,19 @@ contract SaleGatewayTest is Fixture {
 
         // Guards against the fusion quietly ballooning, not targets. What a sale costs is dominated
         // by the records it writes, and writing them is the point of the thing.
-        assertLt(cashGas, 600_000);
+        //
+        // Bilateral capacity moved these, and it is worth writing down what it cost rather than
+        // quietly raising a number. A cash sale went from 562,902 to 632,466 gas — **+69,564**, about
+        // 12% — and every gas of it is the feature: the sale record carries the creator (one slot), the
+        // exposure it creates is recorded against that creator as well as in total (one slot, warm
+        // after the first leg), and the ceiling is asked two questions instead of one. An instant sale
+        // pays less of it (659,520 → 688,327) because it takes no custody, so it writes no bilateral
+        // exposure and the gate returns before it reads anything.
+        //
+        // At this network's 4 gwei, +69,564 gas is about **7 kobo** on a cash sale. That is the price
+        // of the guarantee that trust earned with one creator cannot be spent on another, and it is
+        // not a close call.
+        assertLt(cashGas, 700_000);
         assertLt(instantGas, 850_000);
     }
 }

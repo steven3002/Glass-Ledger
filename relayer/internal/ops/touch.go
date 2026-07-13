@@ -42,7 +42,10 @@ func (o *Ops) TouchDebt(ctx context.Context, debtID uint64) error {
 	if err != nil {
 		return err
 	}
-	allowance, err := o.C.Ceiling.Allowance(callOpts(ctx))
+
+	// The write-down lands on the relationship the default came out of, and on no other. Which one that
+	// is was decided when the debt was minted, not now.
+	allowance, err := o.C.Ceiling.AllowanceOf(callOpts(ctx), debt.CreatorId)
 	if err != nil {
 		return err
 	}
@@ -54,8 +57,9 @@ func (o *Ops) TouchDebt(ctx context.Context, debtID uint64) error {
 	o.Say("  stranger %s touched debt #%d", short(chain.Address(o.Keys.Stranger)), debtID)
 	o.Say("  → %s paid %s from the pool, in full, having sent no transaction of her own",
 		short(debt.Recipient), money(new(big.Int).Sub(balanceAfter, balanceBefore)))
-	o.Say("  → allowance written down to %s; the operator now owes the pool %s, and its growth is frozen",
-		money(allowance), money(owed))
+	o.Say("  → the operator's capacity with creator #%s written down to %s; it now owes the pool %s, "+
+		"and its growth is frozen — with everybody, not only with her",
+		debt.CreatorId, money(allowance), money(owed))
 
 	return nil
 }

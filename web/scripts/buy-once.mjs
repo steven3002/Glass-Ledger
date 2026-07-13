@@ -31,8 +31,22 @@ const ITEM = Number(process.env.GLASS_BUY_ITEM ?? 1010);
 const PORT = Number(process.env.GLASS_CDP_PORT ?? 9333);
 
 const say = (line) => console.log(line);
-const fail = (line) => {
-  console.error(`\n  ✗ ${line}\n`);
+
+/**
+ * Stops, and says what the page actually said.
+ *
+ * The transcript matters more than the exit code. A checkout that failed for a reason the buyer could
+ * read — the counter refused, the ceiling is full, the item is gone — is a different fault from a
+ * checkout that never rendered, and a bare "it never happened" cannot tell them apart. So the page's
+ * own words come out with the failure, and whoever reads this next starts where the buyer stood.
+ */
+let readPage = async () => "";
+const fail = async (line) => {
+  console.error(`\n  ✗ ${line}`);
+
+  const text = await readPage().catch(() => "");
+  if (text) console.error(`\n  what the page said:\n\n${text.replace(/^/gm, "    ")}\n`);
+
   process.exit(1);
 };
 
@@ -66,7 +80,7 @@ async function target() {
     }
     await sleep(250);
   }
-  fail("chromium never opened a page to drive");
+  await fail("chromium never opened a page to drive");
 }
 
 const socket = new WebSocket(await target());
@@ -107,20 +121,26 @@ async function evaluate(expression) {
   return result.value;
 }
 
+readPage = () => evaluate("document.body ? document.body.innerText : ''");
+
 /**
  * Waits for something to become true on the page, and says what it was waiting for when it does not.
  *
  * Every beat of a purchase is a round trip — to the chain, to the store, to the operator — so the page
  * is asked repeatedly rather than assumed to be ready. A step that times out names itself, because a
  * checkout that silently did nothing is the failure this file exists to catch.
+ *
+ * A question the page cannot answer yet is not a failure. In the moment after a navigation there is no
+ * document to interrogate, and asking one anyway throws; that is the same "not yet" as an answer of
+ * false, and the only thing that decides the outcome is the deadline.
  */
 async function until(what, expression, seconds = 60) {
   for (let attempt = 0; attempt < seconds * 4; attempt++) {
-    const value = await evaluate(expression);
+    const value = await evaluate(expression).catch(() => false);
     if (value) return value;
     await sleep(250);
   }
-  fail(`${what} — it never happened`);
+  await fail(`${what} — it never happened`);
 }
 
 /** Clicks the first button whose label contains this text. */
@@ -136,6 +156,23 @@ const clickButton = (text) =>
 const pageSays = (text) =>
   `document.body.innerText.toLowerCase().includes(${JSON.stringify(text.toLowerCase())})`;
 
+/**
+ * Whether the page's verdict badge — not its prose — carries this word.
+ *
+ * Searching the page's text for "genuine" is not the same question and gets the wrong answer: every
+ * refusal explains itself by describing what a genuine tag would have looked like ("a genuine tag
+ * points at a voucher anybody can fetch"), so the word is on the page precisely when the verdict is
+ * *not* it. Asked loosely, this script once congratulated itself on a dress the shop had just
+ * condemned as forged. The verdict is a badge — a leaf element whose whole text is the word — and that
+ * is what gets read.
+ */
+const verdictIs = (word) =>
+  `(() => {
+     const badge = [...document.querySelectorAll("span, div, p")]
+       .find((e) => e.children.length === 0 && e.textContent.trim() === ${JSON.stringify(word)});
+     return Boolean(badge);
+   })()`;
+
 // --- The purchase ----------------------------------------------------------------------------------
 
 say(`\n  the buyer's page at ${ORIGIN}, in a real browser, buying item ${ITEM}\n`);
@@ -150,7 +187,7 @@ say("  ✓ the shop's tags are on the page — fetched from the chain and the pu
 // The tag itself, clicked the way a buyer clicks it. The page then verifies it — against the chain and
 // against 0G, and against nothing of the operator's — before it will offer to sell anything.
 await until(`no tag on the page for item ${ITEM}`, clickButton(`item ${ITEM}`), 30);
-await until("the page never reached a verdict on the tag", pageSays("Genuine"), 90);
+await until("the browser did not find this dress genuine", verdictIs("Genuine"), 90);
 say(`  ✓ item ${ITEM} verified GENUINE by the browser itself, before the shop was asked anything`);
 
 // And now the till. This is the line that was broken: with the deployment lookup wrong, the service

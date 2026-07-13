@@ -67,7 +67,9 @@ func run() error {
 	// The two records have to be about the same deployment, or the table would be an average of two
 	// different shops. The gateway the script created is compared against the gateway the relayer was
 	// pointed at, and a mismatch is a refusal rather than a footnote.
-	deployment, err := chain.LoadDeployment(filepath.Join(*deployments, fmt.Sprint(*chainID)+".json"))
+	deployment, err := chain.LoadDeployment(
+		chain.DeploymentPath("", *deployments, new(big.Int).SetUint64(*chainID)),
+	)
 	if err != nil {
 		return err
 	}

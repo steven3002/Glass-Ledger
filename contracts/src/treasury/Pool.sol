@@ -58,6 +58,15 @@ contract Pool is IPoolReserves, IWriteOffSink {
     /// @inheritdoc IPoolReserves
     uint256 public reimbursementOutstanding;
 
+    /// @inheritdoc IPoolReserves
+    /// @dev Monotone. Nothing in this protocol decrements it, and nothing should: a default is a thing
+    ///      that happened. Paying the pool back afterwards settles a debt and buys back the right to
+    ///      keep trading; it does not buy back the fact.
+    uint256 public defaultCount;
+
+    /// @inheritdoc IPoolReserves
+    uint256 public defaultValue;
+
     /// @notice What write-offs have owed the pool, in total, ever.
     uint256 public writeOffAccrued;
 
@@ -181,6 +190,12 @@ contract Pool is IPoolReserves, IWriteOffSink {
         uint256 available = balance();
         uint256 paid = amount > available ? available : amount;
         uint256 unpaid = amount - paid;
+
+        // The record of failure, and the only number this protocol publishes about the operator. The
+        // whole defaulted amount, not the part the pool could cover — a fund too small to compensate
+        // a victim is not a smaller wrong done to them.
+        defaultCount += 1;
+        defaultValue += amount;
 
         if (paid != 0) {
             reimbursementOutstanding += paid;

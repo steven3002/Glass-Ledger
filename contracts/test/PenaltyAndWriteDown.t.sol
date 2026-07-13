@@ -56,6 +56,11 @@ contract PenaltyAndWriteDownTest is Test {
     uint256 internal constant CEILING_AFTER = 1_820_400e18; // and the new ceiling
     uint256 internal constant HEADROOM_LOST = 480_000e18; // what one ₦80,000 debt cost
 
+    /// @notice Whose goods. One creator, which is what a worked example is: capacity is bilateral now,
+    ///         and a single-creator deployment is the case in which nothing about it is visible. These
+    ///         numbers must therefore be exactly the numbers they always were.
+    uint256 internal constant CREATOR_ID = 1;
+
     uint256 internal constant SALE_REF = 1001;
     uint256 internal constant LATER_SALE = 1002;
 
@@ -122,8 +127,9 @@ contract PenaltyAndWriteDownTest is Test {
     {
         IDebtLedger.Leg[] memory legs = new IDebtLedger.Leg[](1);
         legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, recipient, amount);
-        uint256[] memory ids =
-            debts.mintSaleDebts(saleRef, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
+        uint256[] memory ids = debts.mintSaleDebts(
+            saleRef, CREATOR_ID, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0)
+        );
         return ids[0];
     }
 
@@ -181,7 +187,7 @@ contract PenaltyAndWriteDownTest is Test {
     function test_theIncidentCostsEightHundredInFeesAndHalfAMillionInCapacity() public {
         // Before: pool ₦300,000, allowance ₦2,000,000, ceiling ₦2,300,000 of permissible debt.
         assertEq(pool.balance(), POOL_BEFORE);
-        assertEq(ceiling.allowance(), ALLOWANCE_BEFORE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), ALLOWANCE_BEFORE);
         assertEq(ceiling.ceiling(), POOL_BEFORE + ALLOWANCE_BEFORE);
         assertEq(ceiling.used(), CREATOR_DEBT);
 
@@ -214,7 +220,7 @@ contract PenaltyAndWriteDownTest is Test {
 
         assertEq(ngn.balanceOf(creator), CREATOR_DEBT + PENALTY_HALF);
         assertEq(pool.balance(), POOL_AFTER); // 300,000 + 400 − 80,000 = ₦220,400
-        assertEq(ceiling.allowance(), ALLOWANCE_AFTER); // 2,000,000 − 400,000 = ₦1,600,000
+        assertEq(ceiling.allowanceOf(CREATOR_ID), ALLOWANCE_AFTER); // 2,000,000 − 400,000 = ₦1,600,000
         assertEq(ceiling.ceiling(), CEILING_AFTER); // ₦1,820,400
         assertEq(WRITE_DOWN, WRITE_DOWN_MULTIPLE * CREATOR_DEBT);
 
@@ -250,7 +256,7 @@ contract PenaltyAndWriteDownTest is Test {
 
         // The write-down stands. There is no payment that retroactively un-defaults a debt, and the
         // debt itself is terminal: the recipient's entitlement was closed when the pool paid it.
-        assertEq(ceiling.allowance(), ALLOWANCE_AFTER);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), ALLOWANCE_AFTER);
         assertEq(uint8(debts.debt(creatorDebtId).state), uint8(Types.DebtState.DEFAULTED));
 
         // Capacity heals only the way it was built. The ceiling is back to ₦1,900,400 — the pool
@@ -303,7 +309,7 @@ contract PenaltyAndWriteDownTest is Test {
             )
         );
         ceiling.creditSettlement(honestClaim);
-        assertEq(ceiling.allowance(), ALLOWANCE_AFTER);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), ALLOWANCE_AFTER);
     }
 
     /// @notice Healing is prospective, and it is slow by construction.
@@ -326,7 +332,7 @@ contract PenaltyAndWriteDownTest is Test {
 
         uint256 growth = ceiling.creditSettlement(id);
         assertEq(growth, settled * GROWTH_BPS / 10_000);
-        assertEq(ceiling.allowance(), ALLOWANCE_AFTER + growth);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), ALLOWANCE_AFTER + growth);
 
         // The arithmetic of the climb: at +1% of settled volume, the ₦400,000 that vanished in one
         // block needs ₦40,000,000 of honest, proven settlement to come back.

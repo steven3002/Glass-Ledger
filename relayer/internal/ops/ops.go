@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -93,6 +94,33 @@ func naira(amount int64) *big.Int {
 // recompute them from the vouchers in storage, and the web will do exactly that; the relayer keeps
 // them to hand because it is the party that signed them.
 type Consignment struct {
+	// Which chain posted it. A tranche id, a root and thirteen leaves only mean anything against the
+	// deployment that recorded them, and the same file copied to a page pointed at another chain
+	// produces a shop where every genuine tag reads *forged* — the vouchers it names were published to
+	// a store the other chain never wrote to. That is a failure which looks exactly like the protocol
+	// working, and it is the reason the chain is stamped here rather than inferred from a directory
+	// name.
+	ChainID uint64 `json:"chainId"`
+
+	// The real creator's thirteen dresses. Promoted into this object rather than nested, so the file
+	// the web reads is the file it always was.
+	Tranche
+
+	// And the consignment of the creator the operator made up.
+	//
+	// She has no dresses, no bank account and no existence. Her signing key is the operator's own,
+	// because she *is* the operator — which is not a shortcut in the demo, it is the attack, exactly
+	// as an operator would run it. The protocol registers her without complaint, because there is no
+	// question it could ask that would catch her: nobody has ever been able to tell a fake counterparty
+	// from a real one.
+	//
+	// It does not have to. Whatever the operator earns by trading with her, it can spend only on her —
+	// and she has nothing to sell.
+	Farm *Tranche `json:"farm,omitempty"`
+}
+
+// Tranche is one creator's consignment: who she is, what she posted, and every item under it.
+type Tranche struct {
 	CreatorID uint64 `json:"creatorId"`
 	TrancheID uint64 `json:"trancheId"`
 	Root      string `json:"root"`
@@ -138,17 +166,17 @@ func (o *Ops) Consignment() (Consignment, error) {
 }
 
 // leaves rebuilds the tranche's Merkle leaves, in item order.
-func (c Consignment) leaves() []merkle.Hash {
-	out := make([]merkle.Hash, len(c.Items))
-	for i, item := range c.Items {
+func (t Tranche) leaves() []merkle.Hash {
+	out := make([]merkle.Hash, len(t.Items))
+	for i, item := range t.Items {
 		out[i] = common.HexToHash(item.Digest)
 	}
 	return out
 }
 
-// index is the position of an item id in the consignment — which is its leaf's position.
-func (c Consignment) index(itemID uint64) (int, error) {
-	for i, item := range c.Items {
+// index is the position of an item id in the tranche — which is its leaf's position.
+func (t Tranche) index(itemID uint64) (int, error) {
+	for i, item := range t.Items {
 		if item.ID == itemID {
 			return i, nil
 		}
@@ -163,23 +191,39 @@ func (c Consignment) index(itemID uint64) (int, error) {
 // The community leg mints against a presented voucher and against nothing else. Half of a referral is
 // not a referral, and an operator that could mint the leg without one could mint it to itself.
 func (o *Ops) saleInput(ctx context.Context, itemID uint64, withCommunity bool) (bindings.SaleGatewaySaleInput, error) {
-	var input bindings.SaleGatewaySaleInput
-
 	consignment, err := o.Consignment()
 	if err != nil {
-		return input, err
+		return bindings.SaleGatewaySaleInput{}, err
 	}
-	index, err := consignment.index(itemID)
+	return o.saleInputFrom(ctx, consignment.Tranche, o.Keys.Creator, itemID, withCommunity)
+}
+
+// saleInputFrom is the same, for a named tranche signed by a named key.
+//
+// The key is a parameter because whose it is, is the whole question this protocol has stopped asking.
+// The real creator signs her own vouchers with her own key. The creator the operator invented is signed
+// for by the operator, because there is nobody else to do it — and the gateway cannot tell, will not
+// try, and does not need to.
+func (o *Ops) saleInputFrom(
+	ctx context.Context,
+	tranche Tranche,
+	signer *ecdsa.PrivateKey,
+	itemID uint64,
+	withCommunity bool,
+) (bindings.SaleGatewaySaleInput, error) {
+	var input bindings.SaleGatewaySaleInput
+
+	index, err := tranche.index(itemID)
 	if err != nil {
 		return input, err
 	}
 
-	item, signature, err := o.signedVoucher(ctx, consignment.CreatorID, itemID)
+	item, signature, err := o.signedVoucher(ctx, signer, tranche.CreatorID, itemID)
 	if err != nil {
 		return input, err
 	}
 
-	tree, err := merkle.New(consignment.leaves())
+	tree, err := merkle.New(tranche.leaves())
 	if err != nil {
 		return input, err
 	}
@@ -191,7 +235,7 @@ func (o *Ops) saleInput(ctx context.Context, itemID uint64, withCommunity bool) 
 	input = bindings.SaleGatewaySaleInput{
 		Voucher:               item,
 		Signature:             signature,
-		TrancheId:             new(big.Int).SetUint64(consignment.TrancheID),
+		TrancheId:             new(big.Int).SetUint64(tranche.TrancheID),
 		Proof:                 path,
 		ClaimCodeHash:         claimCodeCommitment(itemID, claimCode(itemID)),
 		CertificateCommitment: certificateCommitment(itemID),
@@ -209,7 +253,7 @@ func (o *Ops) saleInput(ctx context.Context, itemID uint64, withCommunity bool) 
 //
 // The signature is not stored and read back: it is produced from the key each time, because the thing
 // being demonstrated is that the creator's key — and only the creator's key — can make a tag genuine.
-func (o *Ops) signedVoucher(ctx context.Context, creatorID, itemID uint64) (bindings.CreatorRegistryItemVoucher, []byte, error) {
+func (o *Ops) signedVoucher(ctx context.Context, signer *ecdsa.PrivateKey, creatorID, itemID uint64) (bindings.CreatorRegistryItemVoucher, []byte, error) {
 	policy, err := o.C.Gateway.SplitPolicy(callOpts(ctx))
 	if err != nil {
 		return bindings.CreatorRegistryItemVoucher{}, nil, err
@@ -223,7 +267,7 @@ func (o *Ops) signedVoucher(ctx context.Context, creatorID, itemID uint64) (bind
 	}
 
 	domain := voucher.Domain(o.Client.ChainID, o.C.Addresses.Registry)
-	signature, err := item.Sign(o.Keys.Creator, domain)
+	signature, err := item.Sign(signer, domain)
 	if err != nil {
 		return bindings.CreatorRegistryItemVoucher{}, nil, err
 	}

@@ -36,7 +36,7 @@ func (o *Ops) Burn(ctx context.Context, itemID uint64, reason string) error {
 		return err
 	}
 
-	item, signature, err := o.signedVoucher(ctx, consignment.CreatorID, itemID)
+	item, signature, err := o.signedVoucher(ctx, o.Keys.Creator, consignment.CreatorID, itemID)
 	if err != nil {
 		return err
 	}

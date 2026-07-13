@@ -20,6 +20,7 @@
 //	demo touch-claim --claim 2       a stranger collects a lapsed claim
 //	demo touch-debt --debt 4         a stranger collects a defaulted debt
 //	demo burn --item 1005            a write-off, paid as if sold
+//	demo farm                        the operator buys trust from itself, and it buys nothing
 //	demo run                         all seven proofs, in order
 package main
 
@@ -30,17 +31,14 @@ import (
 	"math/big"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/ethereum/go-ethereum/common"
 
-	"goodhouse/relayer/internal/chain"
 	"goodhouse/relayer/internal/feeds"
 	"goodhouse/relayer/internal/ops"
-	"goodhouse/relayer/internal/storage"
 )
 
 func main() {
@@ -51,21 +49,19 @@ func main() {
 }
 
 func run() error {
+	settings := ops.Flags(flag.CommandLine)
+
 	var (
-		rpcURL      = flag.String("rpc", env("GLASS_RPC_URL", "http://127.0.0.1:8545"), "RPC endpoint")
-		deployment  = flag.String("deployment", env("GLASS_DEPLOYMENT", ""), "the deployment the script published")
-		deployments = flag.String("deployments", env("GLASS_DEPLOYMENTS_DIR", "../artifacts/deployments"), "where the deployment script publishes addresses")
-		dataDir     = flag.String("data", env("GLASS_DATA_DIR", "../artifacts/demo"), "where the consignment file and blobs live")
-		devTime     = flag.Bool("dev-time", true, "advance a development chain's clock instead of waiting for it")
-		item        = flag.Uint64("item", 0, "item id")
-		debt        = flag.Uint64("debt", 0, "debt id")
-		claim       = flag.Uint64("claim", 0, "claim id")
-		debtList    = flag.String("debts", "", "comma-separated debt ids")
-		claimList   = flag.String("claims", "", "comma-separated claim ids")
-		valid       = flag.Bool("valid", true, "inject-verdict: whether the payment is in the processor's records")
-		amount      = flag.String("amount", "", "reimburse: how much, in whole naira")
-		recipient   = flag.String("to", "", "collect-penalty: the wronged party")
-		reason      = flag.String("reason", "water damage", "burn: what happened to the item")
+		devTime   = flag.Bool("dev-time", true, "advance a development chain's clock instead of waiting for it")
+		item      = flag.Uint64("item", 0, "item id")
+		debt      = flag.Uint64("debt", 0, "debt id")
+		claim     = flag.Uint64("claim", 0, "claim id")
+		debtList  = flag.String("debts", "", "comma-separated debt ids")
+		claimList = flag.String("claims", "", "comma-separated claim ids")
+		valid     = flag.Bool("valid", true, "inject-verdict: whether the payment is in the processor's records")
+		amount    = flag.String("amount", "", "reimburse: how much, in whole naira")
+		recipient = flag.String("to", "", "collect-penalty: the wronged party")
+		reason    = flag.String("reason", "water damage", "burn: what happened to the item")
 	)
 	flag.Parse()
 
@@ -89,54 +85,18 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	client, err := chain.Dial(ctx, *rpcURL)
+	o, err := ops.Open(ctx, settings, func(format string, args ...any) {
+		fmt.Printf(format+"\n", args...)
+	})
 	if err != nil {
 		return err
 	}
-	defer client.Close()
-	client.DevTime = *devTime
+	defer o.Client.Close()
 
-	// The bill. Every transaction the demo sends is written down as the chain's own receipt reports it,
-	// beside the consignment it paid for, and `gastable` renders the seventh proof from the file
-	// afterwards. A measured gas table is a deliverable of this MVP; a remembered one is a rumour.
-	client.Gas = chain.NewGasLedger(chain.GasLedgerPath(*dataDir))
-
-	// Where the deployment script published its addresses. It is a directory in its own right and is not
-	// derived from the data directory: the shelf is per-chain (a consignment belongs to the deployment
-	// that posted it) and the deployments directory is not, so walking up from one to reach the other
-	// finds the wrong place the moment the shelf moves.
-	path := *deployment
-	if path == "" {
-		path = filepath.Join(*deployments, client.ChainID.String()+".json")
-	}
-	addresses, err := chain.LoadDeployment(path)
-	if err != nil {
-		return err
-	}
-
-	contracts, err := chain.Bind(addresses, client.ETH)
-	if err != nil {
-		return err
-	}
-
-	keys, err := chain.KeysFromEnv()
-	if err != nil {
-		return err
-	}
-
-	store, err := storage.FromEnv(*dataDir)
-	if err != nil {
-		return err
-	}
-
-	o := &ops.Ops{
-		Client: client,
-		C:      contracts,
-		Keys:   keys,
-		Store:  store,
-		Config: ops.DemoConfig(*dataDir),
-		Say:    func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
-	}
+	// A development chain's clock can be pushed forward; a public one cannot, and asking it to fails in
+	// a way that reads like a network fault. This is the one thing the demo needs that the operator's
+	// service must never have.
+	o.Client.DevTime = *devTime
 
 	switch command {
 	case "seed":
@@ -228,6 +188,12 @@ func run() error {
 
 	case "burn":
 		return o.Burn(ctx, *item, *reason)
+
+	case "farm":
+		// The operator buys trust from itself, in the open, and it works. Then it tries to spend it on
+		// somebody real, and it does not.
+		_, err := o.Farm(ctx)
+		return err
 
 	case "kill-check":
 		// The kill-switch beat, from the chain's side. Every number this prints is a public read over a

@@ -57,7 +57,7 @@ contract StalledPayoutTest is Fixture {
 
         uint256 exposure = creatorDebt + landlordDebt + communityDebt;
         assertEq(debts.outstanding(), exposure);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE);
         assertEq(ceiling.ceiling(), POOL_SKIM + GENESIS_ALLOWANCE);
         assertEq(ceiling.headroom(), POOL_SKIM + GENESIS_ALLOWANCE - exposure);
 
@@ -80,7 +80,9 @@ contract StalledPayoutTest is Fixture {
         // The write-down: five times the debt, in one block. And the money the pool laid out is now
         // owed to the pool — it left `outstanding()` and became a reimbursement, counted once, never
         // twice.
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE - WRITE_DOWN_MULTIPLE * creatorDebt);
+        assertEq(
+            ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE - WRITE_DOWN_MULTIPLE * creatorDebt
+        );
         assertEq(pool.reimbursementOutstanding(), creatorDebt);
         assertEq(debts.outstanding(), landlordDebt + communityDebt);
         assertTrue(ceiling.frozen());
@@ -93,7 +95,9 @@ contract StalledPayoutTest is Fixture {
         assertGt(nextExposure, headroom);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, nextExposure, headroom)
+            abi.encodeWithSelector(
+                ISaleAuthorizer.OverCeiling.selector, CREATOR_ID, nextExposure, headroom
+            )
         );
         vm.prank(operator);
         gateway.sellCash(next);

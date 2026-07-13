@@ -134,6 +134,28 @@ async function copyPublishedBlobs() {
     return;
   }
 
+  const consignment = JSON.parse(await readFile(path.join(demo, "consignment.json"), "utf8"));
+
+  // The paperwork has to belong to the chain this page is being built for.
+  //
+  // Build the page for one network with another network's consignment and it does not break — it
+  // *lies*. The tags render, the browser fetches the voucher each one names, finds nothing at that
+  // pointer in this chain's store, and reports the dress as **forged**: a shop where every genuine
+  // item is condemned, by a verifier that is working perfectly and reading the wrong shelf. Nothing
+  // downstream can catch it, because a forged verdict is exactly what a forged tag looks like.
+  //
+  // It is one forgotten environment variable away, so it is refused here rather than documented.
+  const chain = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 31337);
+  if (consignment.chainId !== chain) {
+    throw new Error(
+      `this consignment was posted on chain ${consignment.chainId ?? "an unrecorded chain"}, and the ` +
+        `page is being built for chain ${chain}. Serving it would condemn every genuine tag in the ` +
+        `shop as forged, because the vouchers it points at were published to a store this chain has ` +
+        `never written to. Point GLASS_DATA_DIR at chain ${chain}'s shelf (the relayer's scripts ` +
+        `export it) and seed it, then run this again.`,
+    );
+  }
+
   await cp(path.join(demo, "consignment.json"), path.join(web, "public", "consignment.json"));
 
   const from = path.join(demo, "blobs");

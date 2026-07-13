@@ -59,6 +59,11 @@ abstract contract Fixture is Test {
     uint256 internal constant SALE_PRICE = 100_000e18;
     uint256 internal constant SALE_REF = 1001;
 
+    /// @notice Whose goods. Capacity is bilateral, so a sale has to name a creator — and a suite that
+    ///         only ever names this one is a single-creator deployment, which is what every worked
+    ///         example in the whitepaper is. Those suites must not move by a kobo, and they do not.
+    uint256 internal constant CREATOR_ID = 1;
+
     // The currency is a tag, not a number: a short ISO code widened into a word.
     // forge-lint: disable-next-line(unsafe-typecast)
     bytes32 internal constant CURRENCY = bytes32("NGN");
@@ -231,8 +236,32 @@ abstract contract Fixture is Test {
 
     /// @notice A sale's debts, minted through the seam the gateway mints through.
     function _mintSale(Types.Rail rail, bytes32 claimRef) internal returns (uint256[] memory) {
+        return _mintSaleFor(CREATOR_ID, SALE_REF, SALE_PRICE, rail, claimRef);
+    }
+
+    /// @notice The same, for a named creator at a named price — the seam the farm is built on.
+    function _mintSaleFor(
+        uint256 whose,
+        uint256 saleRef,
+        uint256 price,
+        Types.Rail rail,
+        bytes32 claimRef
+    ) internal returns (uint256[] memory) {
+        (
+            uint256 creatorAmount,
+            uint256 landlordAmount,
+            uint256 communityAmount,
+            uint256 operatorAmount
+        ) = _legs(price, true);
+
+        IDebtLedger.Leg[] memory legs = new IDebtLedger.Leg[](4);
+        legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, creator, creatorAmount);
+        legs[1] = IDebtLedger.Leg(Types.Role.LANDLORD, landlord, landlordAmount);
+        legs[2] = IDebtLedger.Leg(Types.Role.COMMUNITY, communityMember, communityAmount);
+        legs[3] = IDebtLedger.Leg(Types.Role.OPERATOR, treasury, operatorAmount);
+
         vm.prank(address(gateway));
-        return debts.mintSaleDebts(SALE_REF, rail, CURRENCY, _saleLegs(), claimRef);
+        return debts.mintSaleDebts(saleRef, whose, rail, CURRENCY, legs, claimRef);
     }
 
     /// @dev The three legs a claim can cover: everything but the operator's own.

@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/common"
 
 	"goodhouse/relayer/internal/chain"
 	"goodhouse/relayer/internal/feeds"
 	"goodhouse/relayer/internal/ops"
-	"goodhouse/relayer/internal/storage"
 )
 
 // The till: the one part of the operator the buyer's page actually needs.
@@ -36,61 +34,32 @@ import (
 // the only reason it can be left out here.
 type till struct {
 	ops *ops.Ops
+
+	// The processor's secret, as this process was configured with it — not as some other line of code
+	// decided to read it back out of the environment. There is one operator here and it signs with one
+	// key; two lookups of the same secret are two chances to sign with a key nobody verified against.
+	secret string
 }
 
-// openTill wires the operator's side of the counter: keys, the deployed contracts, and the store the
-// vouchers were published to.
+// openTill wires the operator's side of the counter.
+//
+// The assembly itself is `ops.Open`, which the demo uses too — one place that knows how to find a
+// deployment, bind the contracts, load the keys and open the store. That is not tidiness. The two used
+// to be assembled separately, the copies drifted, and this process came up on a public chain with its
+// till bound to `closed` while every other part of the demo worked perfectly.
 //
 // It is allowed to fail. The feeds, the status endpoint and the kill switch do not need a chain, and a
 // relayerd that refused to start without one could not be used to demonstrate the one thing it is for.
 // When there is no till, the checkout endpoints say so in a sentence.
-func openTill(ctx context.Context, rpcURL, deployment, deployments, dataDir string) (*till, error) {
-	client, err := chain.Dial(ctx, rpcURL)
+func openTill(ctx context.Context, settings *ops.Settings, secret string) (*till, error) {
+	operator, err := ops.Open(ctx, settings, func(format string, args ...any) {
+		log.Printf(format, args...)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Where the deployment script published its addresses. It is a directory in its own right and is
-	// not derived from the data directory: the shelf is per-chain (a consignment belongs to the
-	// deployment that posted it) and the deployments directory is not, so walking up from one to reach
-	// the other finds the wrong place the moment the shelf moves — which is precisely what it did, and
-	// this process spent a whole testnet rehearsal with its till shut because of it.
-	path := deployment
-	if path == "" {
-		path = filepath.Join(deployments, client.ChainID.String()+".json")
-	}
-	addresses, err := chain.LoadDeployment(path)
-	if err != nil {
-		client.Close()
-		return nil, err
-	}
-
-	contracts, err := chain.Bind(addresses, client.ETH)
-	if err != nil {
-		client.Close()
-		return nil, err
-	}
-
-	keys, err := chain.KeysFromEnv()
-	if err != nil {
-		client.Close()
-		return nil, err
-	}
-
-	store, err := storage.FromEnv(dataDir)
-	if err != nil {
-		client.Close()
-		return nil, err
-	}
-
-	return &till{ops: &ops.Ops{
-		Client: client,
-		C:      contracts,
-		Keys:   keys,
-		Store:  store,
-		Config: ops.DemoConfig(dataDir),
-		Say:    func(format string, args ...any) { log.Printf(format, args...) },
-	}}, nil
+	return &till{ops: operator, secret: secret}, nil
 }
 
 type buyRequest struct {
@@ -118,9 +87,7 @@ func (t *till) buy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payment := feeds.NewProcessorPayload(
-		env("GLASS_WEBHOOK_SECRET", "demo-webhook-secret"), request.ItemID, "", "NGN",
-	)
+	payment := feeds.NewProcessorPayload(t.secret, request.ItemID, "", "NGN")
 
 	if err := t.ops.SellInstant(r.Context(), request.ItemID, payment); err != nil {
 		// The refusal is the product. The chain decodes its own errors by name (see

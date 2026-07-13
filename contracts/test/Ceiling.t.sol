@@ -69,16 +69,18 @@ contract CeilingTest is Fixture {
         assertEq(headroom, POOL_SKIM + genesis); // nothing outstanding yet
 
         if (exposure <= headroom) {
-            fresh.authorize(exposure, Types.Rail.CUSTODY);
+            fresh.authorize(CREATOR_ID, exposure, Types.Rail.CUSTODY);
         } else {
             vm.expectRevert(
-                abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, exposure, headroom)
+                abi.encodeWithSelector(
+                    ISaleAuthorizer.OverCeiling.selector, CREATOR_ID, exposure, headroom
+                )
             );
-            fresh.authorize(exposure, Types.Rail.CUSTODY);
+            fresh.authorize(CREATOR_ID, exposure, Types.Rail.CUSTODY);
         }
 
         // And whatever the capacity, the instant rail passes: the operator never held that money.
-        fresh.authorize(exposure, Types.Rail.INSTANT);
+        fresh.authorize(CREATOR_ID, exposure, Types.Rail.INSTANT);
     }
 
     /// @notice The instant rail consumes no ceiling, at any size, at any capacity.
@@ -87,7 +89,7 @@ contract CeilingTest is Fixture {
     ///      an instant sale asserts, in the same transaction, that the rail already paid these
     ///      parties, and that assertion is a claim it can be made to prove.
     function testFuzz_theInstantRailNeverConsumesTheCeiling(uint256 exposure) public view {
-        ceiling.authorize(exposure, Types.Rail.INSTANT);
+        ceiling.authorize(CREATOR_ID, exposure, Types.Rail.INSTANT);
     }
 
     /// @notice Exposure rises with no authorization — and the ceiling's answer is to close the till.
@@ -167,7 +169,9 @@ contract CeilingTest is Fixture {
         SaleGateway.SaleInput memory third = _inputWithCommunity(2);
         (uint256 c, uint256 l, uint256 m,) = _legs(itemPrices[2], true);
 
-        vm.expectRevert(abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, c + l + m, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, CREATOR_ID, c + l + m, 0)
+        );
         vm.prank(operator);
         gateway.sellCash(third);
 
@@ -187,7 +191,7 @@ contract CeilingTest is Fixture {
         // the unearned threshold on its own.
         (uint256 c, uint256 l, uint256 m,) = _legs(itemPrices[0], true);
         assertLe(c + l + m, GENESIS_ALLOWANCE);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE);
         assertEq(ceiling.genesisAllowance(), GENESIS_ALLOWANCE);
 
         vm.prank(operator);
@@ -217,7 +221,7 @@ contract CeilingTest is Fixture {
             )
         );
         ceiling.creditSettlement(claimId);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE);
 
         // The sweep puts the evidence on-chain. Now it is worth something.
         _setVerdict(claimId, true);
@@ -230,7 +234,7 @@ contract CeilingTest is Fixture {
         uint256 growth = ceiling.creditSettlement(claimId);
 
         assertEq(growth, settledValue * GROWTH_BPS / 10_000);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE + growth);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE + growth);
 
         // And it is earned once.
         vm.expectRevert(abi.encodeWithSelector(Allowance.AlreadyCredited.selector, claimId));
@@ -256,7 +260,7 @@ contract CeilingTest is Fixture {
 
         assertEq(uint8(debts.claim(claimId).state), uint8(Types.ClaimState.VOIDED));
         assertEq(uint8(debts.debt(ids[0]).state), uint8(Types.DebtState.AGING));
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -289,7 +293,7 @@ contract CeilingTest is Fixture {
         uint256 growth = ceiling.creditSettlement(claimId);
 
         assertEq(growth, (c + l + m) * GROWTH_BPS / 10_000);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE + growth);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE + growth);
         assertEq(ceiling.headroom(), POOL_SKIM + GENESIS_ALLOWANCE + growth);
     }
 

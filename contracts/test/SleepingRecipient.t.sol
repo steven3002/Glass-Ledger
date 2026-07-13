@@ -40,6 +40,11 @@ contract SleepingRecipientTest is Test {
     bytes internal constant EVIDENCE = hex"c0ffee";
     bytes32 internal constant POINTER = keccak256("storage-root-of-the-weekly-attestation");
 
+    /// @notice Whose goods. One creator, which is what a worked example is: capacity is bilateral
+    ///         now, and a single-creator deployment is the case in which none of that is visible.
+    ///         These numbers must therefore be exactly the numbers they always were.
+    uint256 internal constant CREATOR_ID = 1;
+
     uint256 internal constant DEBT = 80_000e18;
     uint256 internal constant PENALTY = 800e18; // 1% of the claimed amount
 
@@ -93,8 +98,9 @@ contract SleepingRecipientTest is Test {
         IDebtLedger.Leg[] memory legs = new IDebtLedger.Leg[](1);
         legs[0] = IDebtLedger.Leg(Types.Role.CREATOR, recipient, DEBT);
 
-        uint256[] memory ids =
-            debts.mintSaleDebts(itemRef, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0));
+        uint256[] memory ids = debts.mintSaleDebts(
+            itemRef, CREATOR_ID, Types.Rail.CUSTODY, CURRENCY, legs, bytes32(0)
+        );
         debtId = ids[0];
     }
 

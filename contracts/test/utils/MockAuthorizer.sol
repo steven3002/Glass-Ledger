@@ -10,6 +10,7 @@ import {Types} from "../../src/libs/Types.sol";
 contract MockAuthorizer is ISaleAuthorizer {
     bool public rejects;
     uint256 public calls;
+    uint256 public lastCreatorId;
     uint256 public lastExposure;
     Types.Rail public lastRail;
 
@@ -17,10 +18,11 @@ contract MockAuthorizer is ISaleAuthorizer {
         rejects = value;
     }
 
-    function authorize(uint256 exposure, Types.Rail rail) external {
+    function authorize(uint256 creatorId, uint256 exposure, Types.Rail rail) external {
         ++calls;
+        lastCreatorId = creatorId;
         lastExposure = exposure;
         lastRail = rail;
-        if (rejects) revert OverCeiling(exposure, 0);
+        if (rejects) revert OverCeiling(creatorId, exposure, 0);
     }
 }

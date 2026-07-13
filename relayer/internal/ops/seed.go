@@ -114,7 +114,7 @@ func (o *Ops) Seed(ctx context.Context) error {
 	for i, id := range o.Config.ItemIDs {
 		itemID := id.Uint64()
 
-		digest, _, err := o.voucherBlob(creatorID, id, policy, domain)
+		digest, _, err := o.voucherBlob(o.Keys.Creator, creatorID, id, policy, domain)
 		if err != nil {
 			return err
 		}
@@ -189,18 +189,29 @@ func (o *Ops) Seed(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	allowance, err := o.C.Ceiling.Allowance(callOpts(ctx))
+	allowance, err := o.C.Ceiling.AllowanceOf(callOpts(ctx), creatorID)
 	if err != nil {
 		return err
 	}
-	o.Say("  pool %s · allowance %s (the disclosed, unearned day-one threshold)",
-		money(balance), money(allowance))
+	o.Say("  pool %s · allowance %s with creator #%s (the disclosed, unearned day-one threshold — and it "+
+		"is hers, not Good's: capacity is a property of a relationship)",
+		money(balance), money(allowance), creatorID)
+
+	// --- And the creator the operator made up. ---
+	farm, err := o.seedFarm(ctx, policy, domain)
+	if err != nil {
+		return err
+	}
 
 	if err := o.saveConsignment(Consignment{
-		CreatorID: creatorID.Uint64(),
-		TrancheID: trancheID.Uint64(),
-		Root:      common.Hash(root).Hex(),
-		Items:     items,
+		ChainID: o.Client.ChainID.Uint64(),
+		Tranche: Tranche{
+			CreatorID: creatorID.Uint64(),
+			TrancheID: trancheID.Uint64(),
+			Root:      common.Hash(root).Hex(),
+			Items:     items,
+		},
+		Farm: farm,
 	}); err != nil {
 		return err
 	}
@@ -266,45 +277,66 @@ func (o *Ops) Publish(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	creatorID := new(big.Int).SetUint64(consignment.CreatorID)
 
 	// What the store itself says it did, as against what this loop asked it to do. The two differ
 	// whenever bytes turn out to be published already, and the difference is money: on 0G an upload is
 	// a submission transaction, and the transaction is nearly the whole price.
 	paidBefore := len(o.storeSubmissions())
 
+	// Both consignments: the real creator's dresses, signed with her key, and the invented creator's,
+	// signed with the operator's — because there is nobody else to sign for somebody who does not exist.
+	// Her vouchers are published exactly like anybody's, and they check out exactly like anybody's. That
+	// is the point being made, and it costs an upload to make it honestly.
+	shelves := []struct {
+		tranche *Tranche
+		signer  *ecdsa.PrivateKey
+	}{
+		{&consignment.Tranche, o.Keys.Creator},
+	}
+	if consignment.Farm != nil {
+		shelves = append(shelves, struct {
+			tranche *Tranche
+			signer  *ecdsa.PrivateKey
+		}{consignment.Farm, o.Keys.Operator})
+	}
+
 	published, skipped := 0, 0
-	for i, item := range consignment.Items {
-		if item.Pointer != "" {
-			skipped++
-			continue
-		}
+	for _, shelf := range shelves {
+		creatorID := new(big.Int).SetUint64(shelf.tranche.CreatorID)
 
-		digest, blob, err := o.voucherBlob(creatorID, new(big.Int).SetUint64(item.ID), policy, domain)
-		if err != nil {
-			return err
-		}
-		if digest.Hex() != item.Digest {
-			return fmt.Errorf(
-				"item %d hashes to %s here and to %s in the consignment the chain committed to — "+
-					"the voucher this would publish is not the one the tranche contains",
-				item.ID, digest.Hex(), item.Digest,
+		for i, item := range shelf.tranche.Items {
+			if item.Pointer != "" {
+				skipped++
+				continue
+			}
+
+			digest, blob, err := o.voucherBlob(
+				shelf.signer, creatorID, new(big.Int).SetUint64(item.ID), policy, domain,
 			)
-		}
+			if err != nil {
+				return err
+			}
+			if digest.Hex() != item.Digest {
+				return fmt.Errorf(
+					"item %d hashes to %s here and to %s in the consignment the chain committed to — "+
+						"the voucher this would publish is not the one the tranche contains",
+					item.ID, digest.Hex(), item.Digest,
+				)
+			}
 
-		pointer, err := o.publish(ctx, fmt.Sprintf("voucher-%d", item.ID), blob)
-		if err != nil {
-			return fmt.Errorf("publishing item %d (%d of %d already published): %w",
-				item.ID, published, len(consignment.Items), err)
-		}
+			pointer, err := o.publish(ctx, fmt.Sprintf("voucher-%d", item.ID), blob)
+			if err != nil {
+				return fmt.Errorf("publishing item %d (%d published so far): %w", item.ID, published, err)
+			}
 
-		// Written down before the next upload is attempted. An upload whose pointer was lost is an
-		// upload that has to be paid for again.
-		consignment.Items[i].Pointer = pointer.Hex()
-		if err := o.saveConsignment(consignment); err != nil {
-			return err
+			// Written down before the next upload is attempted. An upload whose pointer was lost is an
+			// upload that has to be paid for again.
+			shelf.tranche.Items[i].Pointer = pointer.Hex()
+			if err := o.saveConsignment(consignment); err != nil {
+				return err
+			}
+			published++
 		}
-		published++
 	}
 
 	paid := len(o.storeSubmissions()) - paidBefore
@@ -327,7 +359,7 @@ func (o *Ops) Publish(ctx context.Context) error {
 //
 // The signature is produced from the key every time rather than stored and read back, because the thing
 // being demonstrated is that the creator's key, and only the creator's key, can make a tag genuine.
-func (o *Ops) voucherBlob(creatorID, itemID *big.Int, policy [32]byte, domain common.Hash) (common.Hash, []byte, error) {
+func (o *Ops) voucherBlob(signer *ecdsa.PrivateKey, creatorID, itemID *big.Int, policy [32]byte, domain common.Hash) (common.Hash, []byte, error) {
 	id := itemID.Uint64()
 
 	item := voucher.Voucher{
@@ -337,7 +369,7 @@ func (o *Ops) voucherBlob(creatorID, itemID *big.Int, policy [32]byte, domain co
 		SplitPolicyRef: policy,
 	}
 
-	signature, err := item.Sign(o.Keys.Creator, domain)
+	signature, err := item.Sign(signer, domain)
 	if err != nil {
 		return common.Hash{}, nil, err
 	}

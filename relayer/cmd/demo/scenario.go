@@ -10,17 +10,18 @@ import (
 	"goodhouse/relayer/internal/ops"
 )
 
-// The shelf, by item id. Thirteen dresses; the demo consumes eight of them.
+// The shelf, by item id. Thirteen dresses; the demo consumes nine of them.
 const (
-	itemInstant  = 1001 // P1: the atomic sale
-	itemBuyer    = 1002 // P1: a sponsored purchase and a claim code
-	itemHonest   = 1003 // P4: the honest cash sale — claimed, settled, proven, credited
-	itemLie      = 1004 // P4: the false claim — challenged, unanswered, void
-	itemAsleep   = 1005 // P4: the sleeping recipient — never challenged, never covered, void anyway
-	itemStalled  = 1006 // P5: never claimed at all. The thesis.
-	itemOffBooks = 1007 // P3: the item that went home in somebody's bag
-	itemBurned   = 1008 // P6: the write-off
-	itemAfter    = 1009 // P5: the sale that is refused, and the one that is not
+	itemInstant   = 1001 // P1: the atomic sale
+	itemBuyer     = 1002 // P1: a sponsored purchase and a claim code
+	itemHonest    = 1003 // P4: the honest cash sale — claimed, settled, proven, credited
+	itemLie       = 1004 // P4: the false claim — challenged, unanswered, void
+	itemAsleep    = 1005 // P4: the sleeping recipient — never challenged, never covered, void anyway
+	itemStalled   = 1006 // P5: never claimed at all. The thesis.
+	itemOffBooks  = 1007 // P3: the item that went home in somebody's bag
+	itemBurned    = 1008 // P6: the write-off
+	itemAfter     = 1009 // P5: the sale that is refused, and the one that is not
+	itemStillShut = 1010 // Q24: the sale that is refused again, after the operator farms its own trust
 )
 
 // scenario runs the whole demo: the seven proofs, in the order the story tells them.
@@ -184,7 +185,25 @@ func scenario(ctx context.Context, o *ops.Ops) error {
 	o.Say("  coverage window; it could never replace the evidence.")
 
 	// ─── Act 4 ────────────────────────────────────────────────────────────────────────────────────
-	act(4, "The two sales that will not be paid")
+	act(4, "The operator buys itself a reputation — and the two sales it will not pay")
+
+	// Q24, and the sharpest question a judge can ask. It is answered here, before it is asked.
+	//
+	// The operator's books are clean at this moment, and that is not a convenience of the script: growth
+	// is frozen the instant it owes the pool anything, so an operator that has already defaulted cannot
+	// trade its way back out. A farmer has to stock up *first*. So it does — exactly as it would.
+	o.Say("  Before any of this goes wrong, the operator does something entirely legal, entirely public,")
+	o.Say("  and entirely successful: it invents a creator and buys a reputation from her.\n")
+
+	conjured, err := o.Farm(ctx)
+	if err != nil {
+		return err
+	}
+
+	o.Say("\n  Nothing about that was forged. The dresses were consigned, the sale went through, the money")
+	o.Say("  moved, and the proof was VALID — because the operator really did pay those accounts. They")
+	o.Say("  were its own. The protocol was told the truth at every step, and the only lie in the whole")
+	o.Say("  loop is a person, which is the one thing no protocol has ever been able to check.\n")
 
 	o.Say("  A cash sale the operator will simply never pay, and never even lie about (P5)…\n")
 	if err := o.SellCash(ctx, itemStalled); err != nil {
@@ -250,6 +269,52 @@ func scenario(ctx context.Context, o *ops.Ops) error {
 	}
 	o.Say("  …while the same item, on the rail that never puts money in the operator's hands, still")
 	o.Say("  sells. The ceiling constrains custody, and custody only. Commerce does not stop.")
+
+	// And now Q24, cashed in. The operator is holding a reputation it manufactured in Act 4, and this
+	// is the moment it would spend it. Both locks hold, and they are different locks.
+	o.Say("\n  ── and the reputation the operator bought itself in Act 4? ──\n")
+
+	status, err := o.Status(ctx)
+	if err != nil {
+		return err
+	}
+	for _, row := range status.Capacity {
+		o.Say("  creator #%d: allowance %s · headroom %s", row.CreatorID, ops.Money(row.Allowance), ops.Money(row.Headroom))
+	}
+
+	// No counterfactual arithmetic here, and that is deliberate. The exact headroom a pooled allowance
+	// would have left is not a number this program can honestly compute — the write-down would have
+	// landed differently too — and a demo that overstates its own case has handed the room a reason to
+	// disbelieve the parts that are true. The two lines above are enough, because they are facts.
+	o.Say("")
+	o.Say("  The operator is standing on over a million naira of headroom. It cannot spend one kobo of")
+	o.Say("  it, because it is headroom *with a creator who does not exist*. Under a single pooled")
+	o.Say("  allowance those two lines would be ONE line, and the %s it conjured would be sitting in", ops.Money(conjured))
+	o.Say("  the same pot as hers, ready to be spent on her dresses. That was the hole. Here they are")
+	o.Say("  two lines, and hers is zero.\n")
+
+	refusal, err = o.SellCashExpectingRefusal(ctx, itemStillShut)
+	if err != nil {
+		return err
+	}
+	o.Say("  the cash sale of the REAL creator's dress, one more time → %s", refusal)
+	o.Say("  Still shut. The operator spent real money buying trust from itself, and the till will not")
+	o.Say("  open — because trust here is not a score you hold, it is a thing you have *with somebody*.")
+	o.Say("  It cannot be moved. And it cannot be manufactured, because manufacturing it means")
+	o.Say("  manufacturing the person you earned it with — and she is then the only person on earth you")
+	o.Say("  are allowed to spend it on.\n")
+
+	// The second lock, which is a different one, and which the operator now walks into.
+	o.Say("  So it tries to farm again, from here:\n")
+	refusal, err = o.FarmExpectingRefusal(ctx)
+	if err != nil {
+		return err
+	}
+	o.Say("  → %s", refusal)
+	o.Say("  It cannot even do that. Growth is frozen the moment the operator owes the pool — with every")
+	o.Say("  creator at once, the invented one included. **It cannot farm its way out of a hole it is")
+	o.Say("  standing in.** There is exactly one road back, and it is the one the ledger has been")
+	o.Say("  pointing at since the default: pay the pool what it covered for you.\n")
 
 	// ─── Act 6 ────────────────────────────────────────────────────────────────────────────────────
 	act(6, "P3 — the standing buy option, and P6 — the write-off")

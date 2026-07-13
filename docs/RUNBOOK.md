@@ -94,7 +94,41 @@ Three cash sales, three fates, and the recipient does nothing in any of them.
   coverage deadline, because no sweep could ever cover a payment that never happened. *She was protected
   by arithmetic, not by vigilance.*
 
-## Act 4–5 — P5: the stalled payout (**the thesis**)
+## Act 4 — The operator buys itself a reputation, and the two sales it will not pay
+
+Before anything goes wrong, the operator does something entirely legal, entirely public and entirely
+successful: **it invents a creator.** It consigns her imaginary dresses, sells them to itself, pays
+accounts it controls, and attests to those payments with a proof that is **valid** — because the money
+really moved.
+
+> creator `0xd3BD…8290` registered as **#2** — and she is the operator, signing with the operator's own key
+> tranche #2 posted for her: 3 items at ₦25,000,000 each, and the operator is her landlord too
+> item 2001 sold to the operator for ₦25,000,000, paid to the operator, and proven by the operator
+> item 2002 — the same
+>
+> creator **#2 (invented)**: allowance ₦450,000 → **₦875,000** — the operator conjured **₦425,000** of
+> capacity out of a counterparty it made up, and the protocol was right to credit it
+> creator **#1 (real)**: allowance ₦451,050 → **₦451,050.** Not one kobo. She was not part of this.
+
+**Say this part slowly, because the room will assume you are showing them a bug.** Nothing here was
+forged. The dresses were consigned, the sales went through, the money moved, and the proof was *valid* —
+the operator really did pay those accounts, and they were its own. The protocol was told the truth at
+every step. The only lie in the entire loop is a **person**, and telling a manufactured counterparty from
+a real one is a problem nobody has ever solved. This protocol does not try. It makes the answer
+worthless instead, and Act 5 is where you show them.
+
+Then the two sales that go wrong: a cash sale the operator will never pay and never even lie about (P5),
+and the dress that quietly went home in somebody's bag, which a stranger now buys (P3).
+
+> **and THIS is why the shop cannot sell off the books.** Not because the cash is watched — it is not.
+> Because the *item* is: its twin is still listed, still buyable by anyone in the world, and the operator
+> can no longer deliver it. Selling quietly does not erase the obligation. It opens a short position that
+> a stranger can call — **and one just did.**
+
+That sentence is not optional. A cold reader who was shown this demo without it concluded, unprompted,
+that Good *could* sell off the books. See question 5 below.
+
+## Act 5 — P5: the stalled payout (**the thesis**), and what the reputation was worth
 
 The operator sells a dress for cash and simply never pays. It does not lie, does not stall, does not
 file anything. Nothing happens procedurally. The debt ages, in public, in red.
@@ -102,15 +136,42 @@ file anything. Nothing happens procedurally. The debt ages, in public, in red.
 Then the deadline passes and **a stranger** — an account with no position in any of this — touches it:
 
 > `0x7099…79C8` **paid ₦120,000 from the pool, in full, having sent no transaction of her own**
-> allowance written down to ₦0; the operator owes the pool ₦120,000, and its growth is frozen
+> the operator's capacity with creator #1 written down to **₦0**; it owes the pool ₦120,000, and its
+> growth is frozen — **with everybody, not only with her**
 
 And the beat the whole protocol exists for — the very next cash sale, at the counter:
 
-> the next cash sale → **`OverCeiling(157500000000000000000000, 0)`**
+> the next cash sale → **`OverCeiling(1, 157500000000000000000000, 0)`**
 > **the till is shut. Not by a policy, not by a person — by arithmetic that anybody can check.**
 
-Then sell the *same item* on the instant rail, and watch it go through. The ceiling constrains **custody**,
-and custody only. Commerce does not stop; the right to hold other people's money does.
+The refusal names the creator, because the till can be open for one and shut for another in the same
+instant. Then sell the *same item* on the instant rail and watch it go through: the ceiling constrains
+**custody**, and custody only. Commerce does not stop; the right to hold other people's money does.
+
+**And now cash in Act 4.** The operator is holding a reputation it manufactured. This is the moment it
+would spend it:
+
+> creator **#1**: allowance ₦0 · headroom **₦0**
+> creator **#2**: allowance ₦875,000 · headroom **₦1,036,062.50**
+>
+> the cash sale of the REAL creator's dress, one more time → **`OverCeiling(1, 166250000000000000000000, 0)`**
+
+**The operator is standing on over a million naira of headroom and cannot spend one kobo of it**, because
+it is headroom *with a creator who does not exist*. Under a single pooled allowance those two lines would
+be one line, and the ₦425,000 would be sitting in the same pot as hers, ready to be spent on her dresses.
+That was the hole. Here they are two lines, and hers is zero.
+
+> A reputation you build by trading with yourself is a reputation you can only spend on yourself.
+
+Then it tries to farm again, from here, and hits a **second, different lock**:
+
+> → **`GrowthFrozen(9, 120000000000000000000000)`**
+
+It cannot even do that. Growth is frozen the moment the operator owes the pool — with every creator at
+once, the invented one included. **It cannot farm its way out of a hole it is standing in.** There is
+exactly one road back, and it is the one the ledger has been pointing at since the default: pay the pool
+what it covered for you. *(This is also why the farm happens in Act 4 rather than here: a farmer has to
+stock up before it goes wrong. That is forced by the protocol, not chosen by the script.)*
 
 ## Act 6 — P3 and P6
 
@@ -153,11 +214,12 @@ a test failure, not a footnote.
 
 ---
 
-## The five questions you will be asked
+## The six questions you will be asked
 
 These are not hypothetical. Two people who had never seen this project were handed nothing but the demo's
-transcript and asked what they made of it; between them they asked all five, unprompted, and four of the
-five are fair. Have the answers ready — the fifth is the one to be honest about.
+transcript and asked what they made of it; between them they asked the first five, unprompted, and four
+of those five are fair. The sixth is the sharpest thing anybody can ask about this design, and **Act 4
+answers it before it is asked** — but have the words ready in case somebody gets there first.
 
 **1. "The oracle is a stub. Isn't that the whole system?"** — *Yes, and it is the one thing we did not
 build.* The MVP ships the real **interface** with a stub behind it, deliberately (a real zkTLS prover is
@@ -194,6 +256,28 @@ its twin stays listed, buyable by anyone on earth, and the shop can no longer de
 does not erase the obligation — it opens a short position a stranger can call, which is precisely what
 Act 6 shows. Say that sentence out loud at the moment the stranger buys item 1007, or the room will draw
 the opposite conclusion and be sure it is right.
+
+**6. "Good earns its own reputation. So it can just fake the counterparty and print it."** — **Yes. It
+can, it does, and you watched it work in Act 4.** Do not argue with this question; concede it completely,
+because conceding it is the answer. Good invented a creator, sold her imaginary dresses to itself, paid
+its own accounts, proved every payment — and every step was *true*, which is why no detector could ever
+have caught it. Telling a manufactured counterparty from a real one is a problem nobody has solved, and
+this protocol does not pretend to.
+
+It makes the answer worthless instead. **Capacity is bilateral**: earned with a creator, spendable only
+on that creator's goods. So the farm succeeds completely and buys an empty room — ₦425,000 of real,
+credited, honestly-earned capacity, usable only on the dresses of a woman who does not exist. Point at
+the two lines on the ledger: creator #1 at zero, creator #2 at ₦875,000, and the till still refusing.
+*A reputation you build by trading with yourself is a reputation you can only spend on yourself.*
+
+And if they push — *"then it just farms after it defaults, to dig itself out"* — no: **growth is frozen
+the moment it owes the pool**, with every creator at once, the invented one included. It cannot farm its
+way out of a hole it is standing in. There is one road back and it is paying the pool. Both locks are on
+screen in Act 5; the tests are `test_theFarmThatBuysNothing` and `test_theRecordCannotBeFarmed`.
+
+**One thing to be honest about if it comes up:** the same reasoning is why the protocol publishes **no
+score** — the only global number is a record of *failure*, in absolute counts and amounts, with no rate
+anywhere in it. A rate has a denominator, and a denominator is exactly what a farmer manufactures.
 
 ## And the question behind all of them
 

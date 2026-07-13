@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -23,7 +24,16 @@ import (
 // claim into a proven one, so the ratchet that protects the sleeping recipient is the same machine
 // that pays the operator its capacity.
 func (o *Ops) CreditSettlement(ctx context.Context, claimID uint64) error {
-	before, err := o.C.Ceiling.Allowance(callOpts(ctx))
+	// Whose capacity this claim is about. It is not the caller's to say: the creator was fixed on every
+	// debt at mint, by the gateway, out of a tranche the creator's own key signed — so the answer is
+	// read back off the chain rather than passed in, and a narration that named the wrong relationship
+	// would be a narration the ledger could contradict.
+	creatorID, err := o.creatorOfClaim(ctx, claimID)
+	if err != nil {
+		return err
+	}
+
+	before, err := o.C.Ceiling.AllowanceOf(callOpts(ctx), creatorID)
 	if err != nil {
 		return err
 	}
@@ -34,15 +44,28 @@ func (o *Ops) CreditSettlement(ctx context.Context, claimID uint64) error {
 		return err
 	}
 
-	after, err := o.C.Ceiling.Allowance(callOpts(ctx))
+	after, err := o.C.Ceiling.AllowanceOf(callOpts(ctx), creatorID)
 	if err != nil {
 		return err
 	}
 
-	o.Say("  claim #%d's proven value credited: allowance %s → %s (+%s)",
-		claimID, money(before), money(after), money(new(big.Int).Sub(after, before)))
+	o.Say("  claim #%d's proven value credited: the operator's capacity with creator #%s %s → %s (+%s)",
+		claimID, creatorID, money(before), money(after), money(new(big.Int).Sub(after, before)))
 
 	return nil
+}
+
+// creatorOfClaim asks the ledger whose goods a claim's debts arose from.
+func (o *Ops) creatorOfClaim(ctx context.Context, claimID uint64) (*big.Int, error) {
+	debtIDs, err := o.C.Debts.ClaimDebts(callOpts(ctx), new(big.Int).SetUint64(claimID))
+	if err != nil {
+		return nil, err
+	}
+	if len(debtIDs) == 0 {
+		return nil, fmt.Errorf("claim #%d names no debts", claimID)
+	}
+
+	return o.C.Debts.CreatorOf(callOpts(ctx), debtIDs[0])
 }
 
 // CreditSettlementExpectingRefusal tries to collect growth the protocol will not grant, and reports

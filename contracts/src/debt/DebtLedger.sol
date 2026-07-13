@@ -36,10 +36,11 @@ contract DebtLedger is IDebtLedger, EIP712 {
     bytes32 public constant CHALLENGE_TYPEHASH =
         keccak256("Challenge(uint256 claimId,address recipient)");
 
-    /// @dev What every debt of one sale shares: the item, the denomination, and how the money
-    ///      reached the parties. Held once per sale rather than copied into every leg.
+    /// @dev What every debt of one sale shares: the item, whose it was, the denomination, and how the
+    ///      money reached the parties. Held once per sale rather than copied into every leg.
     struct Sale {
         uint256 itemRef;
+        uint256 creatorId;
         bytes32 currency;
         Types.Rail rail;
     }
@@ -119,6 +120,12 @@ contract DebtLedger is IDebtLedger, EIP712 {
     uint256 private _claimCount;
     uint256 private _outstanding;
 
+    /// @dev The same exposure, split by whose goods created it. It is kept here, beside the total,
+    ///      rather than reconstructed by the treasury from the debt list: the two numbers move on
+    ///      exactly the same events, and a sum computed in one contract from state owned by another
+    ///      is a sum that goes wrong the first time somebody adds a state.
+    mapping(uint256 creatorId => uint256) private _outstandingOf;
+
     mapping(uint256 debtId => Record) private _records;
     mapping(uint256 saleId => Sale) private _sales;
     mapping(uint256 claimId => Claim) private _claims;
@@ -134,6 +141,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
         uint256 indexed debtId,
         uint256 indexed saleRef,
         address indexed recipient,
+        uint256 creatorId,
         Types.Role role,
         Types.Rail rail,
         uint256 amount,
@@ -180,6 +188,10 @@ contract DebtLedger is IDebtLedger, EIP712 {
     error InvalidWindow();
     error InvalidPenalty();
     error InvalidAccountHash();
+    /// @dev A sale with no creator has no ceiling to be charged against, and there is no safe default:
+    ///      charging it to nobody would be free custody, and charging it to somebody would be charging
+    ///      it to the wrong person.
+    error UnknownCreator();
     error UnknownDebt(uint256 debtId);
     error UnknownClaim(uint256 claimId);
     error DebtNotOpen(uint256 debtId);
@@ -294,12 +306,15 @@ contract DebtLedger is IDebtLedger, EIP712 {
     /// @inheritdoc IDebtLedger
     function mintSaleDebts(
         uint256 saleRef,
+        uint256 creatorId,
         Types.Rail rail,
         bytes32 currency,
         Leg[] calldata legs,
         bytes32 claimRef
     ) external onlyGateway returns (uint256[] memory debtIds) {
-        uint256 saleId = _openSale(saleRef, currency, rail);
+        uint256 saleId = _openSale(saleRef, creatorId, currency, rail);
+        Sale memory sale = _sales[saleId];
+
         uint64 mintedAt = uint64(block.timestamp);
         uint64 deadline = mintedAt.deadlineFrom(settlementWindow);
 
@@ -325,9 +340,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
                     saleId: SafeCast.toUint32(saleId),
                     claimId: 0
                 }),
-                saleRef,
-                rail,
-                currency
+                sale
             );
         }
 
@@ -346,14 +359,19 @@ contract DebtLedger is IDebtLedger, EIP712 {
     }
 
     /// @inheritdoc IDebtLedger
+    /// @dev The creator is carried here for the same reason it is carried on a sale: a buyer's
+    ///      prepayment is custody exposure taken *on that creator's goods*, so it is charged to that
+    ///      creator's ceiling and, if it defaults, written off that creator's record. The operator
+    ///      cannot take a stranger's money against one relationship's standing and blame another.
     function mintObligation(
         uint256 saleRef,
+        uint256 creatorId,
         address recipient,
         uint256 amount,
         bytes32 currency,
         uint64 deadline
     ) external onlyGateway returns (uint256 debtId) {
-        uint256 saleId = _openSale(saleRef, currency, Types.Rail.CUSTODY);
+        uint256 saleId = _openSale(saleRef, creatorId, currency, Types.Rail.CUSTODY);
         debtId = _mint(
             Record({
                 recipient: recipient,
@@ -365,9 +383,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
                 saleId: SafeCast.toUint32(saleId),
                 claimId: 0
             }),
-            saleRef,
-            Types.Rail.CUSTODY,
-            currency
+            _sales[saleId]
         );
     }
 
@@ -518,6 +534,18 @@ contract DebtLedger is IDebtLedger, EIP712 {
     }
 
     /// @inheritdoc IDebtLedger
+    function outstandingOf(uint256 creatorId) external view returns (uint256) {
+        return _outstandingOf[creatorId];
+    }
+
+    /// @inheritdoc IDebtLedger
+    function creatorOf(uint256 debtId) external view returns (uint256) {
+        Record memory record = _records[debtId];
+        if (record.state == Types.DebtState.NONE) revert UnknownDebt(debtId);
+        return _sales[record.saleId].creatorId;
+    }
+
+    /// @inheritdoc IDebtLedger
     function debt(uint256 debtId) external view returns (Debt memory) {
         Record memory record = _records[debtId];
         if (record.state == Types.DebtState.NONE) revert UnknownDebt(debtId);
@@ -525,6 +553,7 @@ contract DebtLedger is IDebtLedger, EIP712 {
 
         return Debt({
             saleRef: sale.itemRef,
+            creatorId: sale.creatorId,
             recipient: record.recipient,
             role: record.role,
             rail: sale.rail,
@@ -586,33 +615,43 @@ contract DebtLedger is IDebtLedger, EIP712 {
 
     // --- Internals ---
 
-    function _openSale(uint256 saleRef, bytes32 currency, Types.Rail rail)
+    function _openSale(uint256 saleRef, uint256 creatorId, bytes32 currency, Types.Rail rail)
         internal
         returns (uint256 saleId)
     {
+        if (creatorId == 0) revert UnknownCreator();
+
         saleId = ++_saleCount;
-        _sales[saleId] = Sale({itemRef: saleRef, currency: currency, rail: rail});
+        _sales[saleId] =
+            Sale({itemRef: saleRef, creatorId: creatorId, currency: currency, rail: rail});
     }
 
-    function _mint(Record memory record, uint256 saleRef, Types.Rail rail, bytes32 currency)
-        internal
-        returns (uint256 debtId)
-    {
+    /// @dev The sale travels as one value rather than as four parallel arguments. Every debt of a sale
+    ///      shares its item, its creator, its currency and its rail, and four arguments that are meant
+    ///      to agree are four arguments that can be made to disagree.
+    function _mint(Record memory record, Sale memory sale) internal returns (uint256 debtId) {
         if (record.recipient == address(0)) revert ZeroAddress();
 
         debtId = ++_debtCount;
         _records[debtId] = record;
 
-        if (_isExposed(rail, record.state)) _outstanding += record.amount;
+        // Exposure is counted twice, in two places, for two different questions: what the operator is
+        // holding in total, and what it is holding of *this* creator's. The bilateral ceiling asks the
+        // second one, and it is the only one a farmer cannot manufacture.
+        if (_isExposed(sale.rail, record.state)) {
+            _outstanding += record.amount;
+            _outstandingOf[sale.creatorId] += record.amount;
+        }
 
         emit DebtMinted(
             debtId,
-            saleRef,
+            sale.itemRef,
             record.recipient,
+            sale.creatorId,
             record.role,
-            rail,
+            sale.rail,
             record.amount,
-            currency,
+            sale.currency,
             record.mintedAt,
             record.deadline,
             record.state
@@ -753,11 +792,20 @@ contract DebtLedger is IDebtLedger, EIP712 {
         Types.DebtState previous = record.state;
         if (previous == next) return;
 
-        Types.Rail rail = _sales[record.saleId].rail;
-        bool was = _isExposed(rail, previous);
-        bool now_ = _isExposed(rail, next);
-        if (was && !now_) _outstanding -= record.amount;
-        else if (!was && now_) _outstanding += record.amount;
+        Sale memory sale = _sales[record.saleId];
+        bool was = _isExposed(sale.rail, previous);
+        bool now_ = _isExposed(sale.rail, next);
+
+        // The two exposures move together, always, on the same transition. They are the same fact
+        // asked at two scales, and a scale that could drift from the other would be a ceiling that
+        // could be talked out of refusing.
+        if (was && !now_) {
+            _outstanding -= record.amount;
+            _outstandingOf[sale.creatorId] -= record.amount;
+        } else if (!was && now_) {
+            _outstanding += record.amount;
+            _outstandingOf[sale.creatorId] += record.amount;
+        }
 
         record.state = next;
         emit DebtStateChanged(debtId, previous, next, uint64(block.timestamp));

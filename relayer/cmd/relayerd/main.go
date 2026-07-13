@@ -30,18 +30,16 @@ import (
 	"time"
 
 	"goodhouse/relayer/internal/feeds"
+	"goodhouse/relayer/internal/ops"
 )
 
 func main() {
+	settings := ops.Flags(flag.CommandLine)
 	addr := flag.String("addr", ":8790", "address to serve the operator's endpoints on")
 	secret := flag.String(
-		"secret", "demo-webhook-secret",
+		"secret", env("GLASS_WEBHOOK_SECRET", "demo-webhook-secret"),
 		"the processor's HMAC secret — the operator's own, which is exactly why its payloads can never be evidence",
 	)
-	rpcURL := flag.String("rpc", env("GLASS_RPC_URL", "http://127.0.0.1:8545"), "RPC endpoint the till sells on")
-	deployment := flag.String("deployment", env("GLASS_DEPLOYMENT", ""), "the deployment the script published")
-	deployments := flag.String("deployments", env("GLASS_DEPLOYMENTS_DIR", "../artifacts/deployments"), "where the deployment script publishes addresses")
-	dataDir := flag.String("data", env("GLASS_DATA_DIR", "../artifacts/demo"), "where the consignment file and blobs live")
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
@@ -49,7 +47,7 @@ func main() {
 
 	// The counter. It is the only thing on this service the web needs, and it is the write path: a
 	// sale is the one action in the protocol that nobody but the operator can take.
-	counter, err := openTill(context.Background(), *rpcURL, *deployment, *deployments, *dataDir)
+	counter, err := openTill(context.Background(), settings, *secret)
 	if err != nil {
 		logger.Printf("the till is closed (%v) — feeds, status and the kill switch still serve", err)
 	}

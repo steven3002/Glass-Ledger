@@ -94,6 +94,11 @@ contract SaleGateway is ReentrancyGuardTransient {
     struct Context {
         uint256 itemId;
         uint256 trancheId;
+        /// @dev Whose consignment this item is from. Taken from the tranche, which the creator's own
+        ///      key signed the vouchers into — so it is not a field the operator gets to fill in on
+        ///      the way to a ceiling check. Capacity is bilateral, and this is the relationship the
+        ///      sale is spending.
+        uint256 creatorId;
         address creator;
         address landlord;
         bytes32 currency;
@@ -304,12 +309,13 @@ contract SaleGateway is ReentrancyGuardTransient {
 
         Context memory context =
             _resolve(input.voucher, input.signature, input.trancheId, input.proof);
-        authorizer.authorize(context.price, Types.Rail.CUSTODY);
+        authorizer.authorize(context.creatorId, context.price, Types.Rail.CUSTODY);
 
         uint64 deadline = uint64(block.timestamp).deadlineFrom(fulfilmentWindow);
         items.markCommitted(context.itemId, context.trancheId, deadline);
-        refundDebtId =
-            debts.mintObligation(context.itemId, buyer, context.price, context.currency, deadline);
+        refundDebtId = debts.mintObligation(
+            context.itemId, context.creatorId, buyer, context.price, context.currency, deadline
+        );
 
         _commitments[context.itemId] = Commitment({
             buyer: buyer,
@@ -352,6 +358,7 @@ contract SaleGateway is ReentrancyGuardTransient {
         Context memory context = Context({
             itemId: itemId,
             trancheId: item.trancheId,
+            creatorId: tranche.creatorId,
             creator: registry.keyOf(tranche.creatorId),
             landlord: tranche.landlord,
             currency: tranche.currency,
@@ -360,8 +367,9 @@ contract SaleGateway is ReentrancyGuardTransient {
         (IDebtLedger.Leg[] memory legs,) =
             _split(context, order.communityRecipient, order.communityVoucherHash);
 
-        debtIds =
-            debts.mintSaleDebts(itemId, Types.Rail.CUSTODY, tranche.currency, legs, bytes32(0));
+        debtIds = debts.mintSaleDebts(
+            itemId, tranche.creatorId, Types.Rail.CUSTODY, tranche.currency, legs, bytes32(0)
+        );
         _issueCertificate(itemId, order.claimCodeHash, order.certificateCommitment);
         delete _commitments[itemId];
 
@@ -450,7 +458,12 @@ contract SaleGateway is ReentrancyGuardTransient {
 
         items.markBurned(context.itemId, context.trancheId);
         debtIds = debts.mintSaleDebts(
-            context.itemId, Types.Rail.CUSTODY, context.currency, legs, bytes32(0)
+            context.itemId,
+            context.creatorId,
+            Types.Rail.CUSTODY,
+            context.currency,
+            legs,
+            bytes32(0)
         );
         writeOffs.accrueWriteOff(context.itemId, context.currency, sums.penalty, sums.unattributed);
 
@@ -507,9 +520,11 @@ contract SaleGateway is ReentrancyGuardTransient {
         (IDebtLedger.Leg[] memory legs, uint256 exposure) =
             _split(context, input.communityRecipient, input.communityVoucherHash);
 
-        authorizer.authorize(exposure, rail);
+        authorizer.authorize(context.creatorId, exposure, rail);
         items.markSold(context.itemId, context.trancheId);
-        debtIds = debts.mintSaleDebts(context.itemId, rail, context.currency, legs, claimRef);
+        debtIds = debts.mintSaleDebts(
+            context.itemId, context.creatorId, rail, context.currency, legs, claimRef
+        );
         _issueCertificate(context.itemId, input.claimCodeHash, input.certificateCommitment);
 
         emit Sold(
@@ -550,6 +565,7 @@ contract SaleGateway is ReentrancyGuardTransient {
         context = Context({
             itemId: voucher.itemId,
             trancheId: trancheId,
+            creatorId: tranche.creatorId,
             creator: registry.keyOf(tranche.creatorId),
             landlord: tranche.landlord,
             currency: tranche.currency,

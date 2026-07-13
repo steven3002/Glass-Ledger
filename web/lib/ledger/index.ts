@@ -68,6 +68,43 @@ export type Ceiling = {
   unpaidFines: bigint;
 };
 
+/**
+ * What the operator may hold of *one creator's* money.
+ *
+ * There is no single allowance any more, and there is not supposed to be. Capacity is earned with a
+ * creator and spendable only on her goods, so the shop can have a wide-open till with one creator and a
+ * shut one with another, at the same instant — and a page that printed one number would be printing an
+ * average of two answers, neither of which is true.
+ */
+export type Capacity = {
+  creatorId: bigint;
+  allowance: bigint;
+  outstanding: bigint;
+  headroom: bigint;
+};
+
+/**
+ * Good's record: what it has broken, and what it owes.
+ *
+ * **This is not a score, and the difference is the whole point.** Any statistic that aggregates across
+ * counterparties can be farmed, because a farmer manufactures counterparties — a total can be farmed, an
+ * average can be farmed, and a *rate* is worst of all, because a rate has a denominator and the
+ * denominator is exactly what gets manufactured. Sell to yourself ten thousand times and watch any
+ * ratio you like improve.
+ *
+ * So every field below is an absolute count or amount, monotone in Good's misbehaviour. You cannot farm
+ * a clean record. You can only fail to have failed.
+ */
+export type FailureRecord = {
+  defaults: bigint;
+  defaultValue: bigint;
+  claimsVoided: bigint;
+  owedToPool: bigint;
+  penaltiesUnpaid: bigint;
+  growthFrozen: boolean;
+  poolBalance: bigint;
+};
+
 export type Pool = {
   balance: bigint;
   dues: bigint;
@@ -100,6 +137,8 @@ export type Snapshot = {
   debts: Debt[];
   claims: Claim[];
   ceiling: Ceiling;
+  capacity: Capacity[];
+  record: FailureRecord;
   pool: Pool;
   writeOffs: WriteOff[];
   entries: Entry[];
@@ -116,11 +155,13 @@ export async function readLedger(where: Deployment, consignment: Consignment): P
     publicClient.readContract({ address: where.debts, abi: abi.debts, functionName: "claimCount" }),
   ]);
 
-  const [items, debts, claims, ceiling, pool, logs] = await Promise.all([
+  const [items, debts, claims, ceiling, capacity, record, pool, logs] = await Promise.all([
     readItems(where, consignment),
     readDebts(where, debtCount),
     readClaims(where, claimCount),
     readCeiling(where),
+    readCapacity(where),
+    readRecord(where),
     readPool(where),
     publicClient.getLogs({
       address: [where.registry, where.items, where.prices, where.gateway, where.debts, where.sweep, where.pool, where.ceiling],
@@ -141,6 +182,8 @@ export async function readLedger(where: Deployment, consignment: Consignment): P
     debts,
     claims,
     ceiling,
+    capacity,
+    record,
     pool,
     writeOffs,
     entries,
@@ -237,14 +280,14 @@ async function readClaims(where: Deployment, count: bigint): Promise<Claim[]> {
 }
 
 async function readCeiling(where: Deployment): Promise<Ceiling> {
-  const read = <T extends "ceiling" | "used" | "headroom" | "allowance" | "frozen">(functionName: T) =>
+  const read = <T extends "ceiling" | "used" | "headroom" | "totalAllowance" | "frozen">(functionName: T) =>
     publicClient.readContract({ address: where.ceiling, abi: abi.ceiling, functionName });
 
   const [ceiling, used, headroom, allowance, frozen, custody, reimbursements, fines] = await Promise.all([
     read("ceiling"),
     read("used"),
     read("headroom"),
-    read("allowance"),
+    read("totalAllowance"),
     read("frozen"),
     publicClient.readContract({ address: where.debts, abi: abi.debts, functionName: "outstanding" }),
     publicClient.readContract({ address: where.pool, abi: abi.pool, functionName: "reimbursementOutstanding" }),
@@ -261,6 +304,58 @@ async function readCeiling(where: Deployment): Promise<Ceiling> {
     reimbursements,
     unpaidFines: fines,
   };
+}
+
+/**
+ * The operator's standing with every creator the registry knows about.
+ *
+ * The ceiling will answer for a creator it has never heard of too — she stands at her genesis threshold,
+ * because that grant belongs to the relationship rather than to Good — but a table of relationships that
+ * do not exist would be a table of noise.
+ */
+async function readCapacity(where: Deployment): Promise<Capacity[]> {
+  const creators = await publicClient.readContract({
+    address: where.registry,
+    abi: abi.registry,
+    functionName: "creatorCount",
+  });
+
+  const ids = Array.from({ length: Number(creators) }, (_, i) => BigInt(i + 1));
+
+  return Promise.all(
+    ids.map(async (creatorId) => {
+      const [allowance, outstanding, headroom] = await Promise.all([
+        publicClient.readContract({
+          address: where.ceiling,
+          abi: abi.ceiling,
+          functionName: "allowanceOf",
+          args: [creatorId],
+        }),
+        publicClient.readContract({
+          address: where.debts,
+          abi: abi.debts,
+          functionName: "outstandingOf",
+          args: [creatorId],
+        }),
+        publicClient.readContract({
+          address: where.ceiling,
+          abi: abi.ceiling,
+          functionName: "headroomOf",
+          args: [creatorId],
+        }),
+      ]);
+
+      return { creatorId, allowance, outstanding, headroom };
+    }),
+  );
+}
+
+async function readRecord(where: Deployment): Promise<FailureRecord> {
+  return publicClient.readContract({
+    address: where.ceiling,
+    abi: abi.ceiling,
+    functionName: "record",
+  });
 }
 
 async function readPool(where: Deployment): Promise<Pool> {

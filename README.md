@@ -35,6 +35,20 @@ money into its own hands is a number that grows only with proven settlement and 
 by every default. `SaleGateway` is the fusion — the one transaction in which authenticity, inventory,
 the split, the ceiling and the certificate are inseparable.
 
+**Capacity is bilateral, and that is the load-bearing sentence in the treasury.** The allowance is not a
+score the operator holds; it is a number it has *with a creator* — earned on that creator's proven
+payouts, spendable only on that creator's goods. It has to work that way, because an operator can invent
+a creator: consign her imaginary dresses, sell them to itself, pay accounts it controls, and prove every
+one of those payments, all of it true, all of it public, and none of it catchable — telling a
+manufactured counterparty from a real one is a problem nobody has solved. So the protocol does not try.
+It makes the answer worthless instead: whatever Good earns by trading with itself, it can spend only on
+itself. **The farm succeeds completely and buys an empty room** (`test_theFarmThatBuysNothing`).
+
+The same reasoning is why the only global number the protocol publishes is a **record of failure** —
+defaults, claims voided, money owed, fines unpaid — in absolute counts and amounts, with no rate
+anywhere in it. A rate has a denominator, and a denominator is exactly what a farmer manufactures. You
+cannot farm a clean record; you can only fail to have failed (`test_theRecordCannotBeFarmed`).
+
 **The dependency that matters is the one that does not exist.** `web/lib/verify` cannot import anything
 that talks to the relayer, and the boundary is held down by a lint rule, an executable test, and the
 end-to-end script. Stopping the operator's process does not change what a buyer's scan says, because
@@ -47,13 +61,19 @@ this protocol's shape. **The relayer never deploys.** Addresses are published to
 `artifacts/deployments/16602.json`, which the relayer and the web read; neither carries a hard-coded
 address.
 
+> **These addresses are from the deployment that predates bilateral capacity, and they are kept here as
+> the record of a run that happened — not as a shop you can walk into.** `IDebtLedger` and
+> `ISaleAuthorizer` changed shape afterwards, deliberately, so the contracts at these addresses no longer
+> match the code in this repository and today's bindings will not talk to them. Deploy fresh
+> (`relayer/scripts/testnet.sh` does it for you) and this table is regenerated with it.
+
 | | | |
 |---|---|---|
 | `SaleGateway` | [`0xCea3e492D86DC8B3B371EFd0c40944BaD2C98Da2`](https://chainscan-galileo.0g.ai/address/0xCea3e492D86DC8B3B371EFd0c40944BaD2C98Da2) | the atomic sale: authenticity, inventory, split, ceiling and certificate, inseparable |
 | `DebtLedger` | [`0x6E35815b057bB5EC0B4b67f2d08B06f51Ea31CA5`](https://chainscan-galileo.0g.ai/address/0x6E35815b057bB5EC0B4b67f2d08B06f51Ea31CA5) | the clock: mint, age, claim, challenge, settle, void, default |
 | `SweepRegistry` | [`0x0e9072DBDd189e742b0fC09205E158cB9B4B5886`](https://chainscan-galileo.0g.ai/address/0x0e9072DBDd189e742b0fC09205E158cB9B4B5886) | the ratchet: one attestation, many claims proven |
 | `Pool` | [`0x70Bf286C7bBBDE66ec2e71e156a36864545087a3`](https://chainscan-galileo.0g.ai/address/0x70Bf286C7bBBDE66ec2e71e156a36864545087a3) | who pays the wronged party when the operator does not |
-| `Allowance` | [`0x6040388F01A9b86e832F119706D74a0C98ea867C`](https://chainscan-galileo.0g.ai/address/0x6040388F01A9b86e832F119706D74a0C98ea867C) | the ceiling: the right to hold other people's money, as a number |
+| `Allowance` | [`0x6040388F01A9b86e832F119706D74a0C98ea867C`](https://chainscan-galileo.0g.ai/address/0x6040388F01A9b86e832F119706D74a0C98ea867C) | the ceiling: the right to hold **one creator's** money, as a number, earned with her and spendable only on her goods |
 | `CreatorRegistry` | [`0xB1D56614E2Fd05775df915cb732816E344d36b67`](https://chainscan-galileo.0g.ai/address/0xB1D56614E2Fd05775df915cb732816E344d36b67) | the root of trust for a tag |
 | `ItemLedger` | [`0xAdae50B99b8Af59f5322984bC918569267a90d32`](https://chainscan-galileo.0g.ai/address/0xAdae50B99b8Af59f5322984bC918569267a90d32) | the state machine that makes a tag single-use |
 | `PriceBook` | [`0x60A8C429097dcaaf03f0411C5D4811CE781E1923`](https://chainscan-galileo.0g.ai/address/0x60A8C429097dcaaf03f0411C5D4811CE781E1923) | prices the creator writes and the operator cannot |
@@ -108,6 +128,20 @@ at, and it fails loudly if the operator's till is shut:
 
 ```bash
 cd web && GLASS_BUY_ITEM=1011 node scripts/buy-once.mjs      # needs relayerd up, and the web served
+```
+
+> **Build the web against the chain you are demonstrating.** `GLASS_DATA_DIR` names the shelf, and the
+> consignment on it belongs to the deployment that posted it. Point the page at one chain with another
+> chain's paperwork and it does not break — it **condemns every genuine tag in the shop as forged**, from
+> a verifier that is working perfectly and reading the wrong shelf. The scripts export it for you, and
+> the sync refuses a mismatch rather than serving it; if you are standing up the page by hand, export it.
+
+**The attack is real, and it runs on stage.** Act 4 is the operator inventing a creator and buying a
+reputation from her — every transaction succeeding, every proof valid — and Act 5 is that reputation
+turning out to be worth nothing. It is one command on its own if you want to rehearse the beat:
+
+```bash
+cd relayer && go run ./cmd/demo farm
 ```
 
 **The gas is real.** A rehearsal from a fresh deployment cost the operator **0.10983 0G**, measured — the

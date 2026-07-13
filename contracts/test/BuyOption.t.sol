@@ -77,7 +77,7 @@ contract BuyOptionTest is Fixture {
         // takes the operator's entire capacity to hold anybody's money. It stops at zero because
         // there is nothing behind zero.
         assertGt(WRITE_DOWN_MULTIPLE * price, GENESIS_ALLOWANCE);
-        assertEq(ceiling.allowance(), 0);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), 0);
         assertEq(pool.reimbursementOutstanding(), price);
         assertTrue(ceiling.frozen());
 
@@ -195,6 +195,6 @@ contract BuyOptionTest is Fixture {
         // Proven, settled, and worth nothing: a refund is money returned, not value settled.
         vm.expectRevert(abi.encodeWithSelector(Allowance.NothingToCredit.selector, claimId));
         ceiling.creditSettlement(claimId);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE);
     }
 }

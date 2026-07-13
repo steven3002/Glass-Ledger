@@ -25,4 +25,13 @@ interface IPoolReserves {
     ///      operator granted; withdraw the approval and the fine does not disappear — it sits here,
     ///      public, eating the headroom the operator needs in order to keep selling.
     function penaltiesOutstanding() external view returns (uint256);
+
+    /// @notice How many debts the operator has let default. Part of the failure record.
+    function defaultCount() external view returns (uint256);
+
+    /// @notice What those defaults were worth, in total, at the moment each one landed.
+    /// @dev The whole defaulted amount, not the part the pool managed to cover: an empty pool is not a
+    ///      smaller failure. Never decreases — paying the pool back afterwards settles a debt, and it
+    ///      does not unmake a default.
+    function defaultValue() external view returns (uint256);
 }

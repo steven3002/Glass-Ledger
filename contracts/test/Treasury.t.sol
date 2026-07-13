@@ -100,13 +100,13 @@ contract TreasuryTest is Fixture {
         Allowance orphan = new Allowance(operator, debts, 1e18, GROWTH_BPS, WRITE_DOWN_MULTIPLE);
 
         vm.expectRevert(Allowance.PoolNotSet.selector);
-        orphan.authorize(1, Types.Rail.CUSTODY);
+        orphan.authorize(CREATOR_ID, 1, Types.Rail.CUSTODY);
 
         vm.expectRevert(Allowance.PoolNotSet.selector);
         orphan.ceiling();
 
         // The instant rail is the one question it can answer without the pool: no.
-        orphan.authorize(1e30, Types.Rail.INSTANT);
+        orphan.authorize(CREATOR_ID, 1e30, Types.Rail.INSTANT);
     }
 
     // --- The pool's gates ---
@@ -141,7 +141,7 @@ contract TreasuryTest is Fixture {
 
         vm.prank(address(gateway));
         uint256[] memory ids =
-            debts.mintSaleDebts(9999, Types.Rail.CUSTODY, dollars, legs, bytes32(0));
+            debts.mintSaleDebts(9999, CREATOR_ID, Types.Rail.CUSTODY, dollars, legs, bytes32(0));
 
         vm.warp(block.timestamp + SETTLEMENT_WINDOW + 1);
         assertTrue(debts.isDefaultable(ids[0]));
@@ -348,7 +348,7 @@ contract TreasuryTest is Fixture {
         ceiling.liftFreeze();
 
         vm.stopPrank();
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE);
     }
 
     /// @dev The write-down stops at zero. There is nothing behind zero: an operator with no allowance
@@ -366,7 +366,7 @@ contract TreasuryTest is Fixture {
         pool.touch(refundDebtId);
 
         assertGt(WRITE_DOWN_MULTIPLE * itemPrices[0], GENESIS_ALLOWANCE);
-        assertEq(ceiling.allowance(), 0);
+        assertEq(ceiling.allowanceOf(CREATOR_ID), 0);
         assertEq(ceiling.ceiling(), pool.balance());
     }
 
@@ -457,7 +457,7 @@ contract FineThrottleTest is Fixture {
         assertGt(exposure, room);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, exposure, room)
+            abi.encodeWithSelector(ISaleAuthorizer.OverCeiling.selector, CREATOR_ID, exposure, room)
         );
         vm.prank(operator);
         gateway.sellCash(second);
@@ -531,11 +531,13 @@ contract PoolShortfallTest is Fixture {
         // The operator owes the pool what the pool actually laid out — and the write-down is on the
         // whole defaulted amount regardless, because the punishment is for the default.
         assertEq(pool.reimbursementOutstanding(), SMALL_POOL);
-        assertEq(ceiling.allowance(), GENESIS_ALLOWANCE - WRITE_DOWN_MULTIPLE * creatorAmount);
+        assertEq(
+            ceiling.allowanceOf(CREATOR_ID), GENESIS_ALLOWANCE - WRITE_DOWN_MULTIPLE * creatorAmount
+        );
 
         // An empty pool and a written-down allowance: the ceiling is now the allowance alone, and
         // what is already outstanding has outrun it. The till is shut.
-        assertEq(ceiling.ceiling(), ceiling.allowance());
+        assertEq(ceiling.ceiling(), ceiling.allowanceOf(CREATOR_ID));
         assertGt(ceiling.used(), ceiling.ceiling());
         assertEq(ceiling.headroom(), 0);
     }

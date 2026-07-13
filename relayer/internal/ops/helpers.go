@@ -24,6 +24,12 @@ func short32(h [32]byte) string {
 	return hex[:10] + "…"
 }
 
+// Money renders an 18-decimal token amount as naira, for a caller outside this package that has read a
+// figure off the chain and has to print it in the same hand as everything else.
+func Money(amount *big.Int) string {
+	return money(amount)
+}
+
 // money renders an 18-decimal token amount as naira, because the audience counts in naira and the
 // contract counts in wei, and only one of those two is the point.
 func money(amount *big.Int) string {

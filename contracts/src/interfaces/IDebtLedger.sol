@@ -19,6 +19,11 @@ interface IDebtLedger {
     /// @notice A debt as the ledger reports it.
     struct Debt {
         uint256 saleRef;
+        /// @dev Whose goods this debt arose from. Capacity is bilateral, so every obligation has to
+        ///      say which relationship it belongs to: the exposure it creates is charged to that
+        ///      creator's ceiling, and a default on it is written off that creator's record. A debt
+        ///      that could not name its creator would be a debt the treasury had to guess about.
+        uint256 creatorId;
         address recipient;
         Types.Role role;
         Types.Rail rail;
@@ -32,6 +37,9 @@ interface IDebtLedger {
 
     /// @notice Mints the debts a sale creates. Callable only by the sale gateway.
     /// @param saleRef The consumed item.
+    /// @param creatorId Whose goods were sold. The ledger records it against the sale and reports it
+    ///        on every debt: capacity is earned and spent per creator, and a sale that did not say
+    ///        whose it was could not be charged to anybody's ceiling.
     /// @param rail How the money reached the parties.
     /// @param currency The item's denomination. Debts carry the currency they were minted in and
     ///        are settled in it; the protocol never converts.
@@ -42,6 +50,7 @@ interface IDebtLedger {
     ///        Debts minted with a reference open provisional; debts minted without one age.
     function mintSaleDebts(
         uint256 saleRef,
+        uint256 creatorId,
         Types.Rail rail,
         bytes32 currency,
         Leg[] calldata legs,
@@ -55,6 +64,7 @@ interface IDebtLedger {
     ///      default path that covers an unpaid creator. No separate refund machinery exists.
     function mintObligation(
         uint256 saleRef,
+        uint256 creatorId,
         address recipient,
         uint256 amount,
         bytes32 currency,
@@ -79,9 +89,24 @@ interface IDebtLedger {
     ///      not custody). Excludes pool reimbursements, which the treasury tracks.
     function outstanding() external view returns (uint256);
 
+    /// @notice The same exposure, for one creator's goods alone.
+    /// @dev The number the bilateral ceiling is built on. What the operator is holding *of this
+    ///      relationship's* money — and so what this relationship's earned capacity has to cover.
+    ///      The sum of these over every creator is `outstanding()`.
+    function outstandingOf(uint256 creatorId) external view returns (uint256);
+
+    /// @notice Whose goods a debt arose from.
+    /// @dev The treasury's one question when a default lands: whose record does this come off? It is
+    ///      answered from the sale the debt was minted against, which was fixed at mint and cannot be
+    ///      restated afterwards by anybody, the operator least of all.
+    function creatorOf(uint256 debtId) external view returns (uint256);
+
     /// @notice Reads a debt. Reverts on an unknown id.
     function debt(uint256 debtId) external view returns (Debt memory);
 
     /// @notice The number of debts ever minted. Ids run from 1 to this value.
     function debtCount() external view returns (uint256);
+
+    /// @notice How many claims the operator has had voided. Part of the failure record.
+    function voidCount() external view returns (uint256);
 }
