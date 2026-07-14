@@ -61,24 +61,23 @@ this protocol's shape. **The relayer never deploys.** Addresses are published to
 `artifacts/deployments/16602.json`, which the relayer and the web read; neither carries a hard-coded
 address.
 
-> **These addresses are from the deployment that predates bilateral capacity, and they are kept here as
-> the record of a run that happened — not as a shop you can walk into.** `IDebtLedger` and
-> `ISaleAuthorizer` changed shape afterwards, deliberately, so the contracts at these addresses no longer
-> match the code in this repository and today's bindings will not talk to them. Deploy fresh
-> (`relayer/scripts/testnet.sh` does it for you) and this table is regenerated with it.
+Rehearsed end to end on this deployment on **2026-07-14**: all seven proofs, both kill-switch halves, the
+farm act, in **27 minutes** for **0.136 0G**. The deployed bytecode was compared against the local build
+with each contract's constructor-baked immutables masked out — it is **byte-for-byte identical**. This is
+the shop; you can walk into it.
 
 | | | |
 |---|---|---|
-| `SaleGateway` | [`0xCea3e492D86DC8B3B371EFd0c40944BaD2C98Da2`](https://chainscan-galileo.0g.ai/address/0xCea3e492D86DC8B3B371EFd0c40944BaD2C98Da2) | the atomic sale: authenticity, inventory, split, ceiling and certificate, inseparable |
-| `DebtLedger` | [`0x6E35815b057bB5EC0B4b67f2d08B06f51Ea31CA5`](https://chainscan-galileo.0g.ai/address/0x6E35815b057bB5EC0B4b67f2d08B06f51Ea31CA5) | the clock: mint, age, claim, challenge, settle, void, default |
-| `SweepRegistry` | [`0x0e9072DBDd189e742b0fC09205E158cB9B4B5886`](https://chainscan-galileo.0g.ai/address/0x0e9072DBDd189e742b0fC09205E158cB9B4B5886) | the ratchet: one attestation, many claims proven |
-| `Pool` | [`0x70Bf286C7bBBDE66ec2e71e156a36864545087a3`](https://chainscan-galileo.0g.ai/address/0x70Bf286C7bBBDE66ec2e71e156a36864545087a3) | who pays the wronged party when the operator does not |
-| `Allowance` | [`0x6040388F01A9b86e832F119706D74a0C98ea867C`](https://chainscan-galileo.0g.ai/address/0x6040388F01A9b86e832F119706D74a0C98ea867C) | the ceiling: the right to hold **one creator's** money, as a number, earned with her and spendable only on her goods |
-| `CreatorRegistry` | [`0xB1D56614E2Fd05775df915cb732816E344d36b67`](https://chainscan-galileo.0g.ai/address/0xB1D56614E2Fd05775df915cb732816E344d36b67) | the root of trust for a tag |
-| `ItemLedger` | [`0xAdae50B99b8Af59f5322984bC918569267a90d32`](https://chainscan-galileo.0g.ai/address/0xAdae50B99b8Af59f5322984bC918569267a90d32) | the state machine that makes a tag single-use |
-| `PriceBook` | [`0x60A8C429097dcaaf03f0411C5D4811CE781E1923`](https://chainscan-galileo.0g.ai/address/0x60A8C429097dcaaf03f0411C5D4811CE781E1923) | prices the creator writes and the operator cannot |
-| `StubProofVerifier` | [`0xEd6dD22e11B085d624fd4bE521A02868c1dDd672`](https://chainscan-galileo.0g.ai/address/0xEd6dD22e11B085d624fd4bE521A02868c1dDd672) | **the stub.** The real zkTLS verifier swaps in at this seam — see below |
-| `MockNGN` | [`0x23D752cfe694357E0b31144Bc2B0aec67bFc1598`](https://chainscan-galileo.0g.ai/address/0x23D752cfe694357E0b31144Bc2B0aec67bFc1598) | the pool's asset. Production: cNGN (primary), USDC (secondary) |
+| `SaleGateway` | [`0x3099EAfA5F535AD4823c1D771B1f605C7781fe50`](https://chainscan-galileo.0g.ai/address/0x3099EAfA5F535AD4823c1D771B1f605C7781fe50) | the atomic sale: authenticity, inventory, split, ceiling and certificate, inseparable |
+| `DebtLedger` | [`0xCdc5aa114919517280991f062D30e9Ad8Eda22ab`](https://chainscan-galileo.0g.ai/address/0xCdc5aa114919517280991f062D30e9Ad8Eda22ab) | the clock: mint, age, claim, challenge, settle, void, default |
+| `SweepRegistry` | [`0x6282603937297fFa4C903e9676Fb6453D25AAf03`](https://chainscan-galileo.0g.ai/address/0x6282603937297fFa4C903e9676Fb6453D25AAf03) | the ratchet: one attestation, many claims proven |
+| `Pool` | [`0x948A11158777E932789d35a0467cb01991F2b444`](https://chainscan-galileo.0g.ai/address/0x948A11158777E932789d35a0467cb01991F2b444) | who pays the wronged party when the operator does not |
+| `Allowance` | [`0xAb95fE008bfE693CD5ad09Bd076c50ea2AB59726`](https://chainscan-galileo.0g.ai/address/0xAb95fE008bfE693CD5ad09Bd076c50ea2AB59726) | the ceiling: the right to hold **one creator's** money, as a number, earned with her and spendable only on her goods |
+| `CreatorRegistry` | [`0x5cCf6476b7c22b490df9DdF4f76bb2cF10CaD256`](https://chainscan-galileo.0g.ai/address/0x5cCf6476b7c22b490df9DdF4f76bb2cF10CaD256) | the root of trust for a tag |
+| `ItemLedger` | [`0xd1A43B3Ba1307B48cf987CdE9394318b4BF35284`](https://chainscan-galileo.0g.ai/address/0xd1A43B3Ba1307B48cf987CdE9394318b4BF35284) | the state machine that makes a tag single-use |
+| `PriceBook` | [`0x6e81af69b841646b3d31E5aE210B499313dcCf8d`](https://chainscan-galileo.0g.ai/address/0x6e81af69b841646b3d31E5aE210B499313dcCf8d) | prices the creator writes and the operator cannot |
+| `StubProofVerifier` | [`0x673a972968F7E262553d6Bfcde17BE57c1720d34`](https://chainscan-galileo.0g.ai/address/0x673a972968F7E262553d6Bfcde17BE57c1720d34) | **the stub.** The real zkTLS verifier swaps in at this seam — see below |
+| `MockNGN` | [`0x6b9540f34295Cc25a77151F5803bfAF6c06a2516`](https://chainscan-galileo.0g.ai/address/0x6b9540f34295Cc25a77151F5803bfAF6c06a2516) | the pool's asset. Production: cNGN (primary), USDC (secondary) |
 
 The operator is `0xd3BDc969bc9c5E944a346686d57eb042fD9d8290`; its treasury account is
 `0xaA0D18438C4d2deae4095fB505E462Ad51f3813F`, deliberately not the hot key that runs the till.
@@ -117,10 +116,12 @@ Two things differ from the local run, and both are the point rather than a conce
 
 **The clock is real.** A development chain's clock can be pushed forward; a public one cannot, and
 `evm_increaseTime` does not exist on 0G — nor should it. The demo profile's windows (settlement 3 min,
-challenge 2, response 1, coverage 5, fulfilment 3) are therefore *waited out*. **Budget 20–25 minutes**
-(measured: 21.4 and 22.9 on two runs). Fourteen of those minutes are the windows and are fixed; the rest
-is the deployment and the uploads to 0G Storage, and the uploads are the part that varies. The contracts
-are handed the same numbers on both networks and cannot tell which one they are on.
+challenge 2, response 1, coverage 5, fulfilment 3) are therefore *waited out*. **Budget 25–30 minutes**
+(measured: 21.4, 22.9, and 27.1 once the farm act was added). Fourteen of those minutes are the windows
+and are fixed; the rest is the deployment and the uploads to 0G Storage, and the uploads are the part
+that varies. The contracts are handed the same numbers on both networks and cannot tell which one they
+are on — and they demonstrably cannot: the final ledger state of the testnet run is **identical, to the
+kobo, to the local run's.**
 
 **The counter is real too, and the buy button is on the critical path.** Prove it before you show it —
 it drives a real purchase through the real page, in a real browser, against whatever chain you point it
@@ -144,12 +145,17 @@ turning out to be worth nothing. It is one command on its own if you want to reh
 cd relayer && go run ./cmd/demo farm
 ```
 
-**The gas is real.** A rehearsal from a fresh deployment cost the operator **0.10983 0G**, measured — the
-deployment (0.05333), its own transactions and uploads (0.04782), and the gas it hands to the five other
-parties so they can send theirs (~0.009, and a re-run skips it). Every row behind those numbers is in
+**The gas is real.** A rehearsal from a fresh deployment cost the operator **0.136203 0G**, measured
+(2026-07-14): the deployment, its own 89 transactions and 21 uploads to 0G Storage, and the gas it hands
+to the five other parties so they can send theirs. Every row behind that number is in
 [`docs/gas-table.md`](docs/gas-table.md), which is rendered from the run's own receipts rather than
 written by hand. The script refuses to start below 0.15 rather than run out of gas halfway through Act 4
 with an audience watching.
+
+And one figure worth knowing before somebody asks: **the entire self-dealing farm — inventing a creator,
+consigning her, three ₦25,000,000 sales to itself, proving every one, collecting the capacity — cost
+₦3.55 in gas and conjured ₦425,000 of capacity.** That is why the defence is structural. If it rested on
+the attack being expensive, it would not be a defence at all.
 
 **Re-render the bill on the day.** The gas is measured and permanent; the naira column is somebody else's
 exchange rate and will be stale. One command, and it prints the rate and the date it used:

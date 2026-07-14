@@ -25,7 +25,7 @@ sweep coverage 5, fulfilment 3 — and on a public chain they are **waited out**
 has no `evm_increaseTime` and should not have one. The local run finishes in forty seconds by pushing a
 development chain's clock forward; the testnet run cannot, and does not pretend to.
 
-**Budget 20–25 minutes** — two measured runs took 21.4 and 22.9. About fourteen of those minutes are the
+**Budget 25–30 minutes** — measured runs took 21.4, 22.9, and 27.1 once the farm act was added. About fourteen of those minutes are the
 windows, and that part is fixed; the deployment and the sixteen uploads to 0G Storage are the rest, and
 the uploads are the part that wanders. Do not promise a number to the minute; promise the windows.
 
