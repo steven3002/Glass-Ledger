@@ -1,67 +1,307 @@
+"use client";
+
+/**
+ * Home is the explorer: the shop's whole state at a glance, read live from the chain.
+ *
+ * The shape is a block explorer's — a band of counts across the top, the cage as the one deep reading,
+ * then the leaderboards a curious visitor actually wants (what is selling, where, who is being paid)
+ * beside the live record of everything that has happened. Every count and every row is a door: the
+ * point of a landing page is to send you somewhere, not to make you read it.
+ *
+ * The activity feed here carries no persona filter on purpose — that belongs on the history page, which
+ * this one links to. A landing page shows the latest of everything; the tool for reading one party's
+ * lines is one click away.
+ */
+
 import Link from "next/link";
+import type { ReactNode } from "react";
 
-const surfaces = [
-  {
-    href: "/ledger",
-    name: "The ledger",
-    line: "Everything the shop owes, and to whom, and for how long it has owed it.",
-    body:
-      "Items and their states. Debts with their ages ticking. The pool, the allowance, and the ceiling " +
-      "that closes the till when Good is holding more of other people's money than it has earned the " +
-      "right to hold. Read from the chain, by this page, over a public connection anyone can use.",
-  },
-  {
-    href: "/buy",
-    name: "Buy",
-    line: "Check a dress before you pay for it — without asking the shop anything.",
-    body:
-      "Scan the tag. Your browser fetches the creator's signed voucher from public storage, recovers " +
-      "her signature, walks the consignment's proof, and reads whether the item has already been sold. " +
-      "Genuine, forged, or a copy of something already gone: you find out, not the shop.",
-  },
-  {
-    href: "/creator",
-    name: "The tags",
-    line: "The whole consignment on one wall — with one forgery and one clone among them.",
-    body:
-      "Every tag the creator signed, each verifying live against the root the chain holds. Plus a " +
-      "forged tag, signed in your browser by a key nobody registered, and a clone of one already sold. " +
-      "They look identical. They are not, and you can prove which is which without permission.",
-  },
-];
+import {
+  CageRow,
+  CageRowSkeleton,
+  ChainError,
+  PageHeader,
+  Timeline,
+  useLedger,
+  WriteOffs,
+} from "@/components/ledger-view";
+import { Badge, Panel, Skeleton } from "@/components/ui";
+import { naira, shortAddress } from "@/lib/format";
+import type { Cage, Holdings } from "@/lib/ledger";
+import { profilesOf, purseOf } from "@/lib/ledger/profiles";
+import { placeOf } from "@/lib/places";
 
-export default function Home() {
+export default function Overview() {
+  const { cage, holdings, history, problem } = useLedger();
+
+  if (problem && !cage) {
+    return (
+      <main className="mx-auto max-w-3xl p-6 lg:p-8">
+        <ChainError problem={problem} />
+      </main>
+    );
+  }
+
+  const tiles: { href: string; name: string; value?: string; note: string }[] = [
+    { href: "/collections", name: "Collections", value: holdings && String(holdings.tranches.length), note: "consignments on chain" },
+    { href: "/creators", name: "Creators", value: cage && String(cage.capacity.length), note: "registered keys" },
+    { href: "/landlords", name: "Landlords", value: holdings && String(profilesOf(holdings, "landlord").length), note: "spaces hosting goods" },
+    { href: "/community", name: "Community", value: holdings && String(profilesOf(holdings, "community").length), note: "referrers paid" },
+    { href: "/shelf", name: "Items", value: holdings && String(holdings.items.length), note: "on the shelf" },
+    { href: "/debts", name: "Debts", value: holdings && String(holdings.debts.length), note: "minted, every state" },
+    { href: "/claims", name: "Claims", value: holdings && String(holdings.claims.length), note: "assertions of payment" },
+    { href: "/history", name: "Events", value: history && String(history.entries.length), note: "state changes recorded" },
+  ];
+
   return (
-    <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-16">
-      <h1 className="text-4xl font-semibold tracking-tight">A shop you do not have to trust.</h1>
-      <p className="mt-4 max-w-2xl leading-relaxed text-neutral-400">
-        A creator consigns a dress. It sells. Four people are owed money in the same second, and every
-        one of those debts is on a clock that only runs one way — toward a default that anybody in the
-        world can collect, without filing anything, without accusing anybody, and without the shop&rsquo;s
-        cooperation.
-      </p>
-      <p className="mt-3 max-w-2xl leading-relaxed text-neutral-400">
-        Every page here reads the chain directly. Switch the shop off — the demo does, on purpose — and
-        the tags still verify, the clocks still run, and the ledger still answers. The only thing that
-        stops is the till.
-      </p>
+    <main className="mx-auto max-w-[1500px] space-y-5 p-6 lg:p-8">
+      <PageHeader title="The ledger" sub="Read live from the chain. Nothing on this page comes from the shop." />
 
-      <ul className="mt-12 grid gap-4">
-        {surfaces.map((surface) => (
-          <li key={surface.href}>
-            <Link
-              href={surface.href}
-              className="block rounded-xl border border-neutral-800 bg-neutral-950/60 p-6 transition-colors hover:border-neutral-700 hover:bg-neutral-900/60"
-            >
-              <div className="flex flex-wrap items-baseline gap-x-3">
-                <span className="text-lg font-semibold">{surface.name}</span>
-                <span className="text-sm text-neutral-400">{surface.line}</span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-neutral-500">{surface.body}</p>
-            </Link>
-          </li>
+      {/* The counts band — a block explorer's headline row, every tile a door. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+        {tiles.map((t) => (
+          <Link key={t.href} href={t.href} className="card-tap p-4">
+            <div className="text-[0.66rem] font-semibold uppercase tracking-[0.12em] text-faint">{t.name}</div>
+            {t.value !== undefined ? (
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-ink">{t.value}</div>
+            ) : (
+              <Skeleton className="mt-1.5 h-7 w-10" />
+            )}
+            <div className="mt-0.5 text-[0.7rem] text-mut">{t.note}</div>
+          </Link>
         ))}
-      </ul>
+      </div>
+
+      {cage ? <CageRow cage={cage} /> : <CageRowSkeleton />}
+      {history && <WriteOffs writeOffs={history.writeOffs} />}
+
+      {/* The live record, beside what is selling. */}
+      <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <Panel
+          title="Latest on the ledger"
+          hint="Every state change the protocol made, newest first. The full record — with the persona filter — is on the history page."
+        >
+          {history ? (
+            <>
+              <Timeline entries={history.entries.slice(0, 12)} empty="Nothing has happened yet." />
+              {history.entries.length > 12 && (
+                <Link href="/history" className="mt-4 inline-flex items-center text-sm font-medium text-mut transition-colors hover:text-ink">
+                  View all {history.entries.length} events →
+                </Link>
+              )}
+            </>
+          ) : (
+            <FeedSkeleton />
+          )}
+        </Panel>
+
+        <Trending holdings={holdings} />
+      </div>
+
+      {/* The leaderboards: where, who brought the buyer, who signed. */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <HitLocations holdings={holdings} />
+        <TopCommunities holdings={holdings} />
+        <Creators cage={cage} holdings={holdings} />
+      </div>
     </main>
+  );
+}
+
+/* ---- Section furniture ---------------------------------------------------------------------------- */
+
+function ViewAll({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="mt-4 inline-flex items-center text-sm font-medium text-mut transition-colors hover:text-ink">
+      {children} →
+    </Link>
+  );
+}
+
+function RankRow({ href, rank, title, sub, value, badge }: { href: string; rank: number; title: string; sub: string; value?: string; badge?: ReactNode }) {
+  return (
+    <li>
+      <Link href={href} className="flex items-center gap-3 rounded-2xl p-2.5 transition-colors hover:bg-sunken">
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-sunken font-mono text-xs font-semibold text-ink-2">{rank}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-ink">{title}</div>
+          <div className="truncate font-mono text-[0.68rem] text-faint">{sub}</div>
+        </div>
+        {value && <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-ink">{value}</div>}
+        {badge}
+      </Link>
+    </li>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="space-y-2.5">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-11 w-full rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
+function RankSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
+/* ---- The leaderboards ----------------------------------------------------------------------------- */
+
+/** Sales carried per creator — one creator-role debt is minted per sale, so this counts sales. */
+function salesByCreator(holdings?: Holdings): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const debt of holdings?.debts ?? []) {
+    if (debt.role !== "creator") continue;
+    const key = String(debt.creatorId);
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return map;
+}
+
+function Trending({ holdings }: { holdings?: Holdings }) {
+  const sales = salesByCreator(holdings);
+  const rows = [...(holdings?.tranches ?? [])]
+    .map((t) => ({ t, sales: sales.get(String(t.creatorId)) ?? 0 }))
+    .sort((a, b) => b.sales - a.sales || b.t.itemCount - a.t.itemCount)
+    .slice(0, 6);
+
+  return (
+    <Panel title="Trending collections" hint="Ranked by sales carried — a sale mints one creator leg, so this is volume, not trust.">
+      {!holdings ? (
+        <RankSkeleton />
+      ) : rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-faint">No consignment posted yet.</p>
+      ) : (
+        <>
+          <ul className="space-y-1">
+            {rows.map(({ t, sales }, i) => (
+              <RankRow
+                key={String(t.id)}
+                href="/collections"
+                rank={i + 1}
+                title={`${t.location}`}
+                sub={`consignment #${String(t.id)} · creator #${String(t.creatorId)}`}
+                value={`${sales} ${sales === 1 ? "sale" : "sales"}`}
+              />
+            ))}
+          </ul>
+          <ViewAll href="/collections">All collections</ViewAll>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function HitLocations({ holdings }: { holdings?: Holdings }) {
+  const sales = salesByCreator(holdings);
+  const groups = new Map<string, { collections: number; sales: number }>();
+  for (const t of holdings?.tranches ?? []) {
+    const name = placeOf(t.location)?.name ?? t.location;
+    const g = groups.get(name) ?? { collections: 0, sales: 0 };
+    g.collections += 1;
+    g.sales += sales.get(String(t.creatorId)) ?? 0;
+    groups.set(name, g);
+  }
+  const rows = [...groups].sort((a, b) => b[1].sales - a[1].sales || b[1].collections - a[1].collections).slice(0, 5);
+
+  return (
+    <Panel title="Hit locations" hint="Where the goods stand, busiest first. The globe shows the same places.">
+      {!holdings ? (
+        <RankSkeleton />
+      ) : rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-faint">No location named yet.</p>
+      ) : (
+        <>
+          <ul className="space-y-1">
+            {rows.map(([name, g], i) => (
+              <RankRow
+                key={name}
+                href="/map"
+                rank={i + 1}
+                title={name}
+                sub={`${g.collections} ${g.collections === 1 ? "collection" : "collections"}`}
+                value={`${g.sales} ${g.sales === 1 ? "sale" : "sales"}`}
+              />
+            ))}
+          </ul>
+          <ViewAll href="/map">Open the map</ViewAll>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function TopCommunities({ holdings }: { holdings?: Holdings }) {
+  const rows = holdings ? profilesOf(holdings, "community").slice(0, 5) : [];
+
+  return (
+    <Panel title="Top communities" hint="Whoever brought the buyer, by everything ever minted in their name — an absolute total, never a rate.">
+      {!holdings ? (
+        <RankSkeleton />
+      ) : rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-faint">No referral has minted yet.</p>
+      ) : (
+        <>
+          <ul className="space-y-1">
+            {rows.map((p, i) => (
+              <RankRow
+                key={p.address}
+                href={`/who/${p.address}`}
+                rank={i + 1}
+                title={shortAddress(p.address)}
+                sub={`${p.purse.mintedCount} ${p.purse.mintedCount === 1 ? "referral" : "referrals"}`}
+                value={naira(p.purse.minted)}
+              />
+            ))}
+          </ul>
+          <ViewAll href="/community">The leaderboard</ViewAll>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function Creators({ cage, holdings }: { cage?: Cage; holdings?: Holdings }) {
+  return (
+    <Panel title="Creators" hint="The registry's whole population — a signing key, and the till Good has open with each.">
+      {!cage ? (
+        <RankSkeleton />
+      ) : cage.capacity.length === 0 ? (
+        <p className="py-6 text-center text-sm text-faint">Nobody has registered yet.</p>
+      ) : (
+        <>
+          <ul className="space-y-1">
+            {cage.capacity.map((row, i) => {
+              const purse = purseOf((holdings?.debts ?? []).filter((d) => d.role === "creator" && d.creatorId === row.creatorId));
+              const shut = row.headroom === 0n;
+              return (
+                <RankRow
+                  key={String(row.creatorId)}
+                  href={`/creators/${String(row.creatorId)}`}
+                  rank={i + 1}
+                  title={`creator #${String(row.creatorId)}`}
+                  sub={`signs as ${shortAddress(row.key)} · ${purse.mintedCount} sales`}
+                  badge={
+                    <Badge tone={shut ? "alarm" : "good"} dot>
+                      {shut ? "shut" : "open"}
+                    </Badge>
+                  }
+                />
+              );
+            })}
+          </ul>
+          <ViewAll href="/creators">All creators</ViewAll>
+        </>
+      )}
+    </Panel>
   );
 }

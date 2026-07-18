@@ -1,26 +1,247 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * The Glass Ledger design system — light, and only light.
+ *
+ * White cards floating on a soft grey ground, the way a printed ledger sits on a desk. The palette is
+ * the one the app already spoke in — amber for the shop's own signal, emerald for what has been proven,
+ * red for what has defaulted — restated at the weights a light ground needs so a colour still reads as
+ * state and never as decoration. Depth comes from soft shadows and one hairline, not from boxes.
+ */
+@theme {
+  /* Ground and surfaces. */
+  --color-bg: #ecedf0;
+  --color-surface: #ffffff;
+  --color-raised: #f5f6f8;
+  --color-sunken: #f0f1f4;
+  --color-line: #e6e7ec;
+  --color-line-strong: #d5d7de;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* Ink. */
+  --color-ink: #17181c;
+  --color-ink-2: #44454d;
+  --color-mut: #6c6e78;
+  --color-faint: #9a9ca6;
+
+  /* Semantic INK — dark enough to be read as text on white. */
+  --color-accent: #a5680a;
+  --color-good: #0a7d54;
+  --color-bad: #c62f3b;
+  --color-warn: #a5680a;
+
+  /* Semantic FILL — vivid, for meters, dots, and solid marks. */
+  --color-accent-fill: #f5a623;
+  --color-good-fill: #10b981;
+  --color-bad-fill: #ef5350;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --radius-card: 22px;
+  --radius-inner: 16px;
+
+  --shadow-card: 0 1px 2px rgba(20, 22, 28, 0.05), 0 10px 26px -14px rgba(20, 22, 28, 0.16);
+  --shadow-pop: 0 2px 4px rgba(20, 22, 28, 0.07), 0 22px 44px -18px rgba(20, 22, 28, 0.22);
 }
 
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100%;
+    background-color: var(--color-bg);
+    /* A soft light high on the page — the floating-window depth of the reference, as light not shadow. */
+    background-image: radial-gradient(115% 60% at 50% -10%, rgba(255, 255, 255, 0.9), transparent 60%);
+    background-attachment: fixed;
+    color: var(--color-ink);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Tailwind v4's reset sets buttons to cursor:default. A control that does something says so. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  label[for],
+  a[href] {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent-fill);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent-fill) 28%, transparent);
+    color: var(--color-ink);
+  }
+
+  /* A quiet scrollbar, so the chrome never competes with the ledger. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-faint);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* A surface that floats above the ground on a soft shadow and one hairline. */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* An interactive card: same surface, but it answers the cursor. */
+  .card-tap {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-inner);
+    box-shadow: 0 1px 2px rgba(20, 22, 28, 0.04);
+    transition:
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      transform 0.16s ease;
+  }
+  .card-tap:hover {
+    border-color: var(--color-line-strong);
+    box-shadow: var(--shadow-card);
+    transform: translateY(-1px);
+  }
+  .card-tap[data-active="true"] {
+    border-color: color-mix(in oklab, var(--color-accent-fill) 60%, var(--color-line));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent-fill) 45%, transparent), var(--shadow-card);
+  }
+
+  /* The segmented control — one row, a solid dark active pill, per the reference. */
+  .seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--color-sunken);
+    border: 1px solid var(--color-line);
+  }
+  .seg-btn {
+    border-radius: 999px;
+    padding: 0.3rem 0.85rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-mut);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+    white-space: nowrap;
+  }
+  .seg-btn:hover {
+    color: var(--color-ink);
+    background: var(--color-raised);
+  }
+  .seg-btn[data-active="true"] {
+    color: #ffffff;
+    background: var(--color-ink);
+    box-shadow: 0 1px 2px rgba(20, 22, 28, 0.25);
+  }
+
+  /* A meter: a track with rounded fills anchored to the baseline, a 2px surface gap between segments. */
+  .meter {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--color-sunken);
+    box-shadow: inset 0 0 0 1px var(--color-line);
+    overflow: hidden;
+    display: flex;
+    gap: 2px;
+  }
+  .meter > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+  }
+}
+
+/* The map pin's ping: a slow ripple saying "here", swallowed by the reduced-motion rule below. */
+@keyframes gl-ping {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.45;
+  }
+  80%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+.map-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: gl-ping 2.6s ease-out infinite;
+  opacity: 0;
+}
+
+/*
+ * Skeleton screens — the loading standard for a content surface: the shape of the answer, greyed, so
+ * nothing jumps when the real answer arrives. The sweep is fast on purpose; a slow one reads as a slow
+ * page. Unlayered so the class always wins over a utility background.
+ */
+@keyframes gl-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-line-strong) 60%, white);
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: gl-shimmer 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
 }

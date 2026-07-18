@@ -35,6 +35,8 @@ export type WallTag = {
   note: string;
   kind: "genuine" | "forged" | "cloned";
   itemId: number;
+  /** The listed price in NGN wei — for the product card. */
+  price?: string;
   tag: Tag;
   payload: string;
   /** The membership path, kept for the wall's leaf → path → root display. */
@@ -75,10 +77,11 @@ export function genuineTags(consignment: Consignment): WallTag[] {
 
     return {
       id: `item-${item.id}`,
-      label: `Dress ${item.id - 1000}`,
+      label: `Item ${item.id - 1000}`,
       note: `Item ${item.id} · signed by creator #${consignment.creatorId} · one of ${consignment.items.length} leaves under the root`,
       kind: "genuine",
       itemId: item.id,
+      price: item.price,
       tag,
       payload: encodeTag(tag),
       proof,
@@ -133,7 +136,7 @@ export async function forgedTag(
     splitPolicyRef: bytesOf(voucher.splitPolicyRef),
     digest: "0x",
     signature,
-    metadata: { name: "Dress 99", location: "unknown" },
+    metadata: { name: "Item 99", location: "unknown" },
   };
 
   // A forger has no way to get their voucher into the shop's published storage, so the tag has to
@@ -148,7 +151,7 @@ export async function forgedTag(
 
   return {
     id: "forged",
-    label: "Dress 99",
+    label: "Item 99",
     note: "A forgery. Signed a moment ago, in this browser, by a key the registry has never seen.",
     kind: "forged",
     itemId: FORGED_ITEM,

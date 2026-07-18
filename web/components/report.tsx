@@ -35,15 +35,15 @@ export function VerificationReport({ report }: { report: Report }) {
             {headline.word}
           </Badge>
           {report.itemId !== undefined && (
-            <span className="text-sm text-neutral-500">item {String(report.itemId)}</span>
+            <span className="text-sm text-mut">item {String(report.itemId)}</span>
           )}
           {report.price !== undefined && report.price > 0n && (
-            <span className="text-sm text-neutral-500">{naira(report.price)}</span>
+            <span className="text-sm text-mut">{naira(report.price)}</span>
           )}
         </div>
 
         <h2 className="mt-3 text-2xl font-semibold tracking-tight">{report.headline}</h2>
-        <p className="mt-3 max-w-2xl leading-relaxed text-neutral-300">{report.meaning}</p>
+        <p className="mt-3 max-w-2xl leading-relaxed text-ink-2">{report.meaning}</p>
       </Panel>
 
       <Panel
@@ -64,34 +64,34 @@ function Check({ check }: { check: Report["checks"][number] }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <li className="border-t border-neutral-900 pt-3 first:border-0 first:pt-0">
+    <li className="border-t border-line pt-3 first:border-0 first:pt-0">
       <div className="flex items-start gap-3">
         <span
           className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-            check.passed ? "bg-emerald-900 text-emerald-300" : "bg-red-900 text-red-300"
+            check.passed ? "bg-good-fill text-good" : "bg-bad-fill text-bad"
           }`}
           aria-hidden
         >
           {check.passed ? "✓" : "✕"}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-neutral-200">{check.title}</div>
-          <p className="mt-0.5 text-sm leading-relaxed text-neutral-400">{check.detail}</p>
+          <div className="text-sm font-medium text-ink">{check.title}</div>
+          <p className="mt-0.5 text-sm leading-relaxed text-mut">{check.detail}</p>
 
           {check.evidence && check.evidence.length > 0 && (
             <>
               <button
                 onClick={() => setOpen(!open)}
-                className="mt-1.5 text-xs text-neutral-500 underline underline-offset-4 hover:text-neutral-300"
+                className="mt-1.5 text-xs text-mut underline underline-offset-4 hover:text-ink-2"
               >
                 {open ? "hide the bytes" : "show me the bytes"}
               </button>
 
               {open && (
-                <dl className="mt-2 space-y-1.5 rounded-lg border border-neutral-900 bg-black/40 p-3">
+                <dl className="mt-2 space-y-1.5 rounded-lg border border-line bg-sunken p-3">
                   {check.evidence.map((line, i) => (
                     <div key={`${line.label}-${i}`} className="grid gap-0.5 sm:grid-cols-[13rem_1fr] sm:gap-3">
-                      <dt className="text-xs text-neutral-600">{line.label}</dt>
+                      <dt className="text-xs text-faint">{line.label}</dt>
                       <dd>
                         <Bytes>{line.value}</Bytes>
                       </dd>

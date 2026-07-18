@@ -27,6 +27,7 @@ import {
 export type Debt = {
   id: bigint;
   itemId: bigint;
+  creatorId: bigint;
   recipient: Address;
   role: Role;
   rail: (typeof RAILS)[number];
@@ -54,6 +55,28 @@ export type Item = {
   state: ItemState;
   price: bigint;
   owner: Address;
+  /** The tranche the chain's lazy slot names — 0 until the item is touched; the paperwork names it sooner. */
+  trancheId: bigint;
+  committedUntil: bigint;
+};
+
+/**
+ * A collection, as the chain holds it: one record, one root.
+ *
+ * This is the whole on-chain footprint of a consignment before anything sells — the items under the
+ * root are paperwork until the state machine touches them. The landlord's address and the location
+ * label are part of the record itself: the creator's tranche names where it sits and who the 5% leg
+ * belongs to, which is the closest thing this protocol has to a landlord "registering".
+ */
+export type Tranche = {
+  id: bigint;
+  creatorId: bigint;
+  landlord: Address;
+  itemCount: number;
+  postedAt: bigint;
+  root: Hex;
+  currency: Hex;
+  location: string;
 };
 
 /** The till, in four numbers — and the three the used one is made of. */
@@ -78,6 +101,8 @@ export type Ceiling = {
  */
 export type Capacity = {
   creatorId: bigint;
+  /** The signing key she registered — her on-chain identity, and the only thing a voucher is checked against. */
+  key: Address;
   allowance: bigint;
   outstanding: bigint;
   headroom: bigint;
@@ -129,66 +154,94 @@ export type Entry = {
   tone: "plain" | "good" | "warn" | "alarm" | "quiet";
   /** Whose business this was, when the log names somebody. */
   who?: Address;
-};
-
-export type Snapshot = {
-  now: number;
-  items: Item[];
-  debts: Debt[];
-  claims: Claim[];
-  ceiling: Ceiling;
-  capacity: Capacity[];
-  record: FailureRecord;
-  pool: Pool;
-  writeOffs: WriteOff[];
-  entries: Entry[];
-  /** Who holds which role, learned from the debts themselves rather than assumed. */
-  roleOf: Map<string, Role>;
+  /** What the log was about, when it names a thing — so a dossier can pull only its own lines. */
+  itemId?: bigint;
+  debtId?: bigint;
+  claimId?: bigint;
+  trancheId?: bigint;
+  creatorId?: bigint;
 };
 
 type Consignment = { items: { id: number; price: string }[] };
 
-export async function readLedger(where: Deployment, consignment: Consignment): Promise<Snapshot> {
-  const [block, debtCount, claimCount] = await Promise.all([
-    publicClient.getBlock(),
-    publicClient.readContract({ address: where.debts, abi: abi.debts, functionName: "debtCount" }),
-    publicClient.readContract({ address: where.debts, abi: abi.debts, functionName: "claimCount" }),
-  ]);
+/**
+ * The ledger is read in three stages, in the order a reader needs them — because waiting for all of it
+ * at once means waiting for the slowest part of it, which is the event history: a full log scan from
+ * the first block plus a timestamp read per block anything happened in.
+ *
+ *   1. the cage      the till, the record, the pool, the per-creator capacity. A handful of reads, and
+ *                    the headline of the whole page. It lands first, so the cage is on screen while the
+ *                    rest is still coming.
+ *   2. the holdings  the shelf, the debts and their ages, the claims. The body of the ledger.
+ *   3. the history   every event ever, narrated. The heaviest read, and the least urgent — a reader has
+ *                    already seen the state before they read the story of how it got there.
+ *
+ * They are fetched in parallel and rendered as each arrives; the page holds a skeleton in the place of
+ * whichever stage has not answered yet.
+ */
+export type Cage = {
+  now: number;
+  ceiling: Ceiling;
+  capacity: Capacity[];
+  record: FailureRecord;
+  pool: Pool;
+};
 
-  const [items, debts, claims, ceiling, capacity, record, pool, logs] = await Promise.all([
-    readItems(where, consignment),
-    readDebts(where, debtCount),
-    readClaims(where, claimCount),
+export type Holdings = {
+  items: Item[];
+  debts: Debt[];
+  claims: Claim[];
+  tranches: Tranche[];
+  /** Who holds which role, learned from the debts themselves rather than assumed. */
+  roleOf: Map<string, Role>;
+};
+
+export type History = {
+  entries: Entry[];
+  writeOffs: WriteOff[];
+};
+
+/** Stage 1 — the cage: the till, the record, the pool, the capacity. First on screen. */
+export async function readCage(where: Deployment): Promise<Cage> {
+  const [block, ceiling, capacity, record, pool] = await Promise.all([
+    publicClient.getBlock(),
     readCeiling(where),
     readCapacity(where),
     readRecord(where),
     readPool(where),
-    publicClient.getLogs({
-      address: [where.registry, where.items, where.prices, where.gateway, where.debts, where.sweep, where.pool, where.ceiling],
-      fromBlock: 0n,
-      toBlock: "latest",
-    }),
+  ]);
+  return { now: Number(block.timestamp), ceiling, capacity, record, pool };
+}
+
+/** Stage 2 — the holdings: the shelf, the debts, the claims. */
+export async function readHoldings(where: Deployment, consignment: Consignment): Promise<Holdings> {
+  const [debtCount, claimCount] = await Promise.all([
+    publicClient.readContract({ address: where.debts, abi: abi.debts, functionName: "debtCount" }),
+    publicClient.readContract({ address: where.debts, abi: abi.debts, functionName: "claimCount" }),
+  ]);
+
+  const [items, debts, claims, tranches] = await Promise.all([
+    readItems(where, consignment),
+    readDebts(where, debtCount),
+    readClaims(where, claimCount),
+    readTranches(where),
   ]);
 
   const roleOf = new Map<string, Role>();
   for (const debt of debts) roleOf.set(debt.recipient.toLowerCase(), debt.role);
   roleOf.set(where.operatorRecipient.toLowerCase(), "operator");
 
-  const { entries, writeOffs } = await narrate(logs);
+  return { items, debts, claims, tranches, roleOf };
+}
 
-  return {
-    now: Number(block.timestamp),
-    items,
-    debts,
-    claims,
-    ceiling,
-    capacity,
-    record,
-    pool,
-    writeOffs,
-    entries,
-    roleOf,
-  };
+/** Stage 3 — the history: every event ever, narrated. The heaviest read, and the last needed. */
+export async function readHistory(where: Deployment): Promise<History> {
+  const logs = await publicClient.getLogs({
+    address: [where.registry, where.items, where.prices, where.gateway, where.debts, where.sweep, where.pool, where.ceiling],
+    fromBlock: 0n,
+    toBlock: "latest",
+  });
+  return narrate(logs);
 }
 
 async function readItems(where: Deployment, consignment: Consignment): Promise<Item[]> {
@@ -212,10 +265,43 @@ async function readItems(where: Deployment, consignment: Consignment): Promise<I
 
       return {
         id: itemId,
-        name: `Dress ${id - 1000}`,
+        name: `Item ${id - 1000}`,
         state: ITEM_STATES[item.state] ?? "ABSENT",
         price,
         owner: item.owner,
+        trancheId: item.trancheId,
+        committedUntil: item.committedUntil,
+      };
+    }),
+  );
+}
+
+/** Every consignment the chain holds: the record, and the location label posted with it. */
+async function readTranches(where: Deployment): Promise<Tranche[]> {
+  const count = await publicClient.readContract({
+    address: where.items,
+    abi: abi.items,
+    functionName: "trancheCount",
+  });
+
+  const ids = Array.from({ length: Number(count) }, (_, i) => BigInt(i + 1));
+
+  return Promise.all(
+    ids.map(async (id) => {
+      const [tranche, location] = await Promise.all([
+        publicClient.readContract({ address: where.items, abi: abi.items, functionName: "tranche", args: [id] }),
+        publicClient.readContract({ address: where.items, abi: abi.items, functionName: "locationOf", args: [id] }),
+      ]);
+
+      return {
+        id,
+        creatorId: tranche.creatorId,
+        landlord: tranche.landlord,
+        itemCount: Number(tranche.itemCount),
+        postedAt: tranche.postedAt,
+        root: tranche.root,
+        currency: tranche.currency,
+        location,
       };
     }),
   );
@@ -236,6 +322,7 @@ async function readDebts(where: Deployment, count: bigint): Promise<Debt[]> {
       return {
         id,
         itemId: debt.saleRef,
+        creatorId: debt.creatorId,
         recipient: debt.recipient,
         role: ROLES[debt.role],
         rail: RAILS[debt.rail],
@@ -324,7 +411,13 @@ async function readCapacity(where: Deployment): Promise<Capacity[]> {
 
   return Promise.all(
     ids.map(async (creatorId) => {
-      const [allowance, outstanding, headroom] = await Promise.all([
+      const [key, allowance, outstanding, headroom] = await Promise.all([
+        publicClient.readContract({
+          address: where.registry,
+          abi: abi.registry,
+          functionName: "keyOf",
+          args: [creatorId],
+        }),
         publicClient.readContract({
           address: where.ceiling,
           abi: abi.ceiling,
@@ -345,7 +438,7 @@ async function readCapacity(where: Deployment): Promise<Capacity[]> {
         }),
       ]);
 
-      return { creatorId, allowance, outstanding, headroom };
+      return { creatorId, key, allowance, outstanding, headroom };
     }),
   );
 }
@@ -423,6 +516,11 @@ async function narrate(logs: Log[]): Promise<{ entries: Entry[]; writeOffs: Writ
       sentence: said.sentence,
       tone: said.tone,
       who: said.who ?? (args.recipient as Address | undefined),
+      itemId: big(args.itemId),
+      debtId: big(args.debtId),
+      claimId: big(args.claimId),
+      trancheId: big(args.trancheId),
+      creatorId: big(args.creatorId),
     });
   }
 
@@ -431,6 +529,8 @@ async function narrate(logs: Log[]): Promise<{ entries: Entry[]; writeOffs: Writ
 }
 
 type Said = { sentence: string; tone: Entry["tone"]; who?: Address };
+
+const big = (value: unknown): bigint | undefined => (typeof value === "bigint" ? value : undefined);
 
 const money = (value: unknown) => (typeof value === "bigint" ? naira(value) : "—");
 
@@ -552,13 +652,18 @@ function sentenceFor(name: string, args: Record<string, unknown>): Said | undefi
           `honesty would have paid ${money(args.honestCommission)}.`,
         tone: "warn",
       };
+    case "AccountHashSet":
+      return {
+        sentence: `${who(args.recipient)} put the account they are paid into on file — written from their own key, because a shop that could write that record would be asserting the fact it must later prove.`,
+        tone: "quiet",
+        who: args.recipient as Address,
+      };
     case "ItemBurned":
     case "ItemSold":
     case "ItemOwned":
     case "ItemCommitted":
     case "CommitmentReleased":
     case "DebtStateChanged":
-    case "AccountHashSet":
       return undefined; // Said better by the events above, which carry the money as well as the fact.
     default:
       return undefined; // Deployment wiring: one-shot setters, said once, at the start of time.

@@ -36,13 +36,13 @@ export function OperatorStatus() {
   if (up === undefined) return null;
 
   return up ? (
-    <span className="inline-flex items-center gap-2 text-xs text-neutral-500">
-      <span className="size-2 rounded-full bg-emerald-500" />
+    <span className="inline-flex items-center gap-2 text-xs font-medium text-mut">
+      <span className="size-2 rounded-full bg-good-fill shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-good-fill)_20%,transparent)]" />
       the shop&rsquo;s counter is open
     </span>
   ) : (
-    <span className="inline-flex items-center gap-2 rounded-full border border-amber-800 bg-amber-950/60 px-3 py-1 text-xs font-medium text-amber-300">
-      <span className="size-2 rounded-full bg-amber-500" />
+    <span className="inline-flex items-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--color-accent-fill)_45%,white)] bg-[color-mix(in_oklab,var(--color-accent-fill)_12%,white)] px-3 py-1 text-xs font-medium text-accent">
+      <span className="size-2 rounded-full bg-accent-fill" />
       Good is offline — nothing on this page needed it
     </span>
   );

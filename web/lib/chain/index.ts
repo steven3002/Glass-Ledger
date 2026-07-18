@@ -42,9 +42,28 @@ const chain = defineChain({
   name: CHAIN_ID === 16602 ? "0G Galileo Testnet" : "Local development chain",
   nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
   rpcUrls: { default: { http: [RPC_URL] } },
+  // Multicall3 sits at its canonical address on both 0G Galileo and a fresh Anvil (it is one of the
+  // deterministic-deployment contracts), so naming it here lets the client aggregate the ledger's
+  // hundred-odd reads through it instead of firing them one by one at a rate-limited public RPC.
+  contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } },
 });
 
-export const publicClient: PublicClient = createPublicClient({ chain, transport: http(RPC_URL) });
+/**
+ * One read of the ledger fires ~100 contract reads at once, and it re-reads on a timer. 0G's public
+ * RPC caps a burst at 50 requests ("Too many requests (exceeds 50)"), so a hundred separate `eth_call`s
+ * trip the limit and the page wrongly reports the chain as unreachable when the chain was answering
+ * fine. The fix is to send fewer requests, not slower ones: Multicall3 is deployed at its canonical
+ * address on 0G, so every `readContract` in the same window is aggregated through it — a hundred calls
+ * become one or two — and the handful of non-contract calls (block, logs) are JSON-RPC batched into the
+ * same few HTTP requests. A genuinely stuck request is cut at 20s rather than stalling the whole snapshot.
+ *
+ * A batch counts as one request against the limiter (verified), which is the whole reason this works.
+ */
+export const publicClient: PublicClient = createPublicClient({
+  chain,
+  batch: { multicall: { wait: 16 } },
+  transport: http(RPC_URL, { batch: { wait: 16 }, timeout: 20_000 }),
+});
 
 let cached: Promise<Deployment> | undefined;
 
