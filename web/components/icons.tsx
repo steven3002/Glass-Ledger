@@ -153,3 +153,28 @@ export const UsersIcon = (p: IconProps) => (
     <path d="M190 130a84 84 0 0 1 48 74" />
   </Base>
 );
+
+/** The rest of the row, folded — the standard "there is more here" of a compact list. */
+export const DotsIcon = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx="128" cy="60" r="14" fill="currentColor" stroke="none" />
+    <circle cx="128" cy="128" r="14" fill="currentColor" stroke="none" />
+    <circle cx="128" cy="196" r="14" fill="currentColor" stroke="none" />
+  </Base>
+);
+
+/** The rail, folded away — the phone's door back into the map. */
+export const MenuIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M40 72h176" />
+    <path d="M40 128h176" />
+    <path d="M40 184h176" />
+  </Base>
+);
+
+export const CloseIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M64 64l128 128" />
+    <path d="M192 64L64 192" />
+  </Base>
+);

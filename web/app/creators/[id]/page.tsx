@@ -1,26 +1,27 @@
 "use client";
 
 /**
- * One creator's account.
+ * One creator's account, in the browse theme.
  *
- * Arranged like a block explorer's account page: an identity-and-balance header, then the creator's
- * work as the headline — her collections — with the rest (the money owed to her, her lines of the
- * record) as sub-sections under a tab bar. Everything hangs off one registered key: her vouchers verify
- * against it, her tranches name her by the id it earned, and the bilateral till — allowance, held,
- * headroom — is hers, capacity Good earned with her and spendable only on her goods.
+ * The name flush and large, the identity and the till side by side, her figures ruled apart rather
+ * than boxed, the tabs ruled off — and her collections as the headline tab, the money and the record
+ * behind it. Everything provable hangs off one registered key: her vouchers verify against it, and the
+ * bilateral till — allowance, held, headroom — is hers, capacity Good earned with her and spendable
+ * only on her goods.
  */
 
 import Link from "next/link";
 import { use, useState } from "react";
 
-import { Metric, Plate, Tabs } from "@/components/entity";
+import { FiguresRow, PageFigure } from "@/components/browse";
+import { Plate, Tabs } from "@/components/entity";
 import { CardSkeleton, ChainError, Debts, pct, Timeline, useLedger } from "@/components/ledger-view";
 import { ProductTile } from "@/components/product";
-import { Badge, Empty, Meter, Panel } from "@/components/ui";
+import { Badge, Empty, Meter, Panel, Skeleton } from "@/components/ui";
 import { naira, when } from "@/lib/format";
 import type { Cage } from "@/lib/ledger";
 import { linesAbout, purseOf } from "@/lib/ledger/profiles";
-import { collections as demoCollections, collectionTotals, type Collection } from "@/lib/demo/catalog";
+import { collectionTotals, byCreator as demoByCreator, creatorName, type Collection } from "@/lib/demo/catalog";
 
 const TABS = ["collections", "debts", "activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -55,81 +56,102 @@ export default function CreatorPage({ params }: { params: Promise<{ id: string }
     );
   }
 
+  const name = creatorName(Number(creatorId)) ?? `Creator #${String(creatorId)}`;
   const creditLegs = (holdings?.debts ?? []).filter((d) => d.role === "creator" && d.creatorId === creatorId);
   const purse = purseOf(creditLegs);
   const volume = (holdings?.debts ?? [])
     .filter((d) => d.creatorId === creatorId && d.role !== "buyer")
     .reduce((sum, d) => sum + d.amount, 0n);
-  const myCollections = demoCollections().filter((c) => c.creatorId === Number(creatorId));
+  const myCollections = demoByCreator(Number(creatorId));
   const itemIds = new Set((holdings?.items ?? []).map((i) => i.id));
   const registered = history?.entries.find((e) => e.name === "CreatorRegistered" && e.creatorId === creatorId);
   const lines = history
     ? linesAbout(history.entries, { creatorId, address: capacity?.key, itemIds, debtIds: new Set(creditLegs.map((d) => d.id)) })
     : [];
 
-  const counts: Record<Tab, number | undefined> = {
-    collections: myCollections.length,
-    debts: holdings ? creditLegs.length : undefined,
-    activity: history ? lines.length : undefined,
-  };
-
   return (
-    <main className="mx-auto max-w-[1200px] space-y-5 p-6 lg:p-8">
-      {/* The account header: who she is, and the till Good keeps with her. */}
-      <section className="card p-6">
-        {capacity ? (
-          <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
-            <div className="min-w-0">
-              <div className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-faint">Creator account</div>
-              <div className="mt-2">
-                <Plate address={capacity.key} roles={["creator"]} note={registered ? `registered ${when(registered.at)}` : undefined} />
-              </div>
-              <p className="mt-3 max-w-xl text-sm leading-relaxed text-mut">
+    <main className="mx-auto max-w-[1200px] px-6 pt-8 pb-14 sm:px-10 lg:px-12">
+      {/* Header: who she is, and the till Good keeps with her. */}
+      <nav className="text-xs font-medium tracking-wide text-faint">
+        <Link href="/creators" className="transition-colors hover:text-ink">
+          Creators
+        </Link>
+        <span className="mx-1.5">•</span>
+        <span className="text-mut">{name}</span>
+      </nav>
+      <h1 className="mt-1.5 text-[32px] font-bold tracking-tight text-ink">{name}</h1>
+      <p className="mt-1 max-w-3xl text-sm text-mut">
+        Creator #{String(creatorId)} — a signing key, and everything the ledger proved around it
+        {registered ? ` · registered ${when(registered.at)}` : ""}.
+      </p>
+
+      <div className="mt-8 flex flex-wrap items-start justify-between gap-8">
+        {/* The identity column: her key, what it means, and what it added up to. */}
+        <div className="min-w-0 flex-1">
+          {capacity ? (
+            <>
+              <Plate address={capacity.key} roles={["creator"]} />
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-mut">
                 Every voucher on every tag of hers is checked against this key — the registry is asked who signed, never the
                 paperwork. A forgery with any other key is worthless by construction.
               </p>
-            </div>
-            <Till capacity={capacity} />
-          </div>
-        ) : (
-          <CardSkeleton rows={2} />
-        )}
 
-        {/* The balance strip — her numbers at a glance. */}
-        <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-3 lg:grid-cols-6">
-          <Metric label="Collections" value={String(myCollections.length)} />
-          <Metric label="Sales" value={holdings ? String(purse.mintedCount) : undefined} />
-          <Metric label="Volume" value={holdings ? naira(volume) : undefined} />
-          <Metric label="Owed now" value={holdings ? naira(purse.owedNow) : undefined} />
-          <Metric label="Proven paid" value={holdings ? naira(purse.proven) : undefined} tone="good" />
-          <Metric label="Defaults" value={holdings ? String(purse.defaultedCount) : undefined} tone={purse.defaultedCount > 0 ? "alarm" : "plain"} />
-        </dl>
-      </section>
-
-      {/* The sub-sections, collections first and prominent. */}
-      <Tabs tabs={TABS.map((key) => ({ key, label: key, count: counts[key] }))} active={tab} onChange={setTab} />
-
-      {tab === "collections" && <CreatorCollections collections={myCollections} />}
-      {tab === "debts" && (holdings ? <Debts debts={creditLegs} now={now} role="creator" /> : <CardSkeleton rows={5} tall />)}
-      {tab === "activity" && (
-        <Panel title="Her lines of the record" hint="The public history, cut down to what is this creator's business.">
-          {history ? (
-            <Timeline entries={lines} empty="Nothing yet — her story starts when the consignment posts." />
+              <FiguresRow className="mt-6">
+                <PageFigure label="Collections" value={String(myCollections.length)} first />
+                <PageFigure label="Sales" value={holdings ? String(purse.mintedCount) : undefined} />
+                <PageFigure label="Volume" value={holdings ? naira(volume) : undefined} />
+                <PageFigure label="Owed now" value={holdings ? naira(purse.owedNow) : undefined} />
+                <PageFigure label="Proven paid" value={holdings ? naira(purse.proven) : undefined} tone="good" />
+                <PageFigure
+                  label="Defaults"
+                  value={holdings ? String(purse.defaultedCount) : undefined}
+                  tone={purse.defaultedCount > 0 ? "alarm" : "plain"}
+                />
+              </FiguresRow>
+            </>
           ) : (
-            <CardSkeleton rows={5} />
+            <Skeleton className="h-40 w-full max-w-xl" />
           )}
-        </Panel>
-      )}
+        </div>
+        {capacity && <Till capacity={capacity} />}
+      </div>
+
+      {/* The sub-sections, collections first — ruled off. */}
+      <div className="mt-12">
+        <Tabs
+          tabs={TABS.map((key) => ({
+            key,
+            label: key,
+            count: key === "collections" ? myCollections.length : key === "debts" ? (holdings ? creditLegs.length : undefined) : history ? lines.length : undefined,
+          }))}
+          active={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      <div className="mt-6">
+        {tab === "collections" && <CreatorCollections collections={myCollections} />}
+        {tab === "debts" && (holdings ? <Debts debts={creditLegs} now={now} role="creator" /> : <CardSkeleton rows={5} tall />)}
+        {tab === "activity" && (
+          <Panel title="Her lines of the record" hint="The public history, cut down to what is this creator's business.">
+            {history ? (
+              <Timeline entries={lines} empty="Nothing yet — her story starts when the consignment posts." />
+            ) : (
+              <CardSkeleton rows={5} />
+            )}
+          </Panel>
+        )}
+      </div>
     </main>
   );
 }
 
-/* ---- The till: her balance, as the account's headline number ------------------------------------- */
+/* ---- The till: her balance, kept as its own object ------------------------------------------------ */
 
 function Till({ capacity }: { capacity: NonNullable<Cage["capacity"][number]> }) {
   const shut = capacity.headroom === 0n;
   return (
-    <div className="rounded-2xl border border-line bg-sunken/60 p-4 lg:w-64">
+    <div className="w-full rounded-xl border border-line bg-sunken/60 p-4 lg:w-64">
       <div className="flex items-center justify-between">
         <span className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-faint">Till Good keeps with her</span>
         <Badge tone={shut ? "alarm" : "good"} dot>
@@ -167,30 +189,27 @@ function CreatorCollections({ collections }: { collections: Collection[] }) {
   }
 
   return (
-    <section className="card p-6">
-      <h2 className="mb-4 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">Her collections</h2>
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {collections.map((c) => {
-          const totals = collectionTotals(c);
-          return (
-            <li key={c.id}>
-              <Link href={`/collections/${c.id}`} className="card-tap group block overflow-hidden p-0">
-                <ProductTile name={c.name} className="aspect-[16/9]" />
-                <div className="p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-ink group-hover:underline">{c.name}</span>
-                    <Badge tone="plain">{totals.items} items</Badge>
-                  </div>
-                  <div className="mt-1 text-[0.68rem] text-faint">
-                    {totals.stock} in stock · {totals.sold} sold · {totals.locations}{" "}
-                    {totals.locations === 1 ? "location" : "locations"}
-                  </div>
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {collections.map((c) => {
+        const totals = collectionTotals(c);
+        return (
+          <li key={c.id}>
+            <Link href={`/collections/${c.id}`} className="card-tap group block overflow-hidden p-0">
+              <ProductTile name={c.name} className="aspect-[16/9]" />
+              <div className="p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-semibold text-ink group-hover:underline">{c.name}</span>
+                  <Badge tone="plain">{totals.items} items</Badge>
                 </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+                <div className="mt-1 text-[0.68rem] text-faint">
+                  {totals.stock} in stock · {totals.sold} sold · {totals.locations}{" "}
+                  {totals.locations === 1 ? "location" : "locations"}
+                </div>
+              </div>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

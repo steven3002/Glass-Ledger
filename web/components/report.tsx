@@ -42,8 +42,8 @@ export function VerificationReport({ report }: { report: Report }) {
           )}
         </div>
 
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">{report.headline}</h2>
-        <p className="mt-3 max-w-2xl leading-relaxed text-ink-2">{report.meaning}</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight break-words">{report.headline}</h2>
+        <p className="mt-3 max-w-2xl leading-relaxed break-words text-ink-2">{report.meaning}</p>
       </Panel>
 
       <Panel
@@ -76,7 +76,9 @@ function Check({ check }: { check: Report["checks"][number] }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium text-ink">{check.title}</div>
-          <p className="mt-0.5 text-sm leading-relaxed text-mut">{check.detail}</p>
+          {/* break-words, not break-all: a detail is prose, but it can quote a pointer or an address,
+              and a 66-character hash must fold rather than push the whole column off the screen. */}
+          <p className="mt-0.5 text-sm leading-relaxed break-words text-mut">{check.detail}</p>
 
           {check.evidence && check.evidence.length > 0 && (
             <>

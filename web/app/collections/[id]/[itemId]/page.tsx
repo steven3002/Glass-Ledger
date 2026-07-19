@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * One item — where it stands.
+ * One item — where it stands, in the browse theme.
  *
- * A unique product in a collection, and everything a buyer or the creator wants of it: what it costs in
- * each place, how many are on the shelf there, how many have gone, and the run of recent purchases. The
- * same design carries different prices in different locations — that spread is the point of the table.
+ * The name flush and large with its trail of breadcrumbs, the figures ruled apart rather than boxed,
+ * and then the item's two truths side by side: the per-location price and stock table, and the run of
+ * recent purchases, a page at a time. The same design carries different prices in different places —
+ * that spread is the point of the table.
  *
  * The honest line: price and authenticity are the chain's, per unit; stock and this activity feed are
  * what an indexer derives. Here both are demo data, so the shape can be seen before the index exists.
@@ -14,9 +15,10 @@
 import Link from "next/link";
 import { use } from "react";
 
-import { ProductTile } from "@/components/product";
-import { PageHeader } from "@/components/ledger-view";
+
+import { FiguresRow, PageFigure } from "@/components/browse";
 import { Pager, usePaged } from "@/components/paged";
+import { ProductTile } from "@/components/product";
 import { Badge, Panel } from "@/components/ui";
 import { activityFor, findItem, itemTotals, ngn, since } from "@/lib/demo/catalog";
 
@@ -47,38 +49,49 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
   const t = itemTotals(item);
 
   return (
-    <main className="mx-auto max-w-[1100px] space-y-5 p-6 lg:p-8">
-      <PageHeader
-        title={item.name}
-        sub={
-          <>
+    <main className="mx-auto max-w-[1200px] px-6 pt-8 pb-14 sm:px-10 lg:px-12">
+      {/* Header: what it is, whose line it belongs to, and its picture. */}
+      <div className="flex flex-wrap items-start justify-between gap-8">
+        <div className="min-w-0 flex-1">
+          <nav className="text-xs font-medium tracking-wide text-faint">
+            <Link href="/collections" className="transition-colors hover:text-ink">
+              Collections
+            </Link>
+            <span className="mx-1.5">•</span>
+            <Link href={`/collections/${collection.id}`} className="transition-colors hover:text-ink">
+              {collection.name}
+            </Link>
+            <span className="mx-1.5">•</span>
+            <span className="text-mut">{item.name}</span>
+          </nav>
+          <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-[32px] font-bold tracking-tight text-ink">
+            {item.name}
+            <Badge tone="quiet">demo catalog</Badge>
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm text-mut">
             in{" "}
-            <Link href={`/collections/${collection.id}`} className="underline-offset-2 hover:underline">
+            <Link href={`/collections/${collection.id}`} className="font-medium text-ink-2 underline-offset-2 hover:underline">
               {collection.name}
             </Link>{" "}
-            · by {collection.creatorName}
-          </>
-        }
-        right={<Badge tone="quiet">demo catalog</Badge>}
-      />
+            · by{" "}
+            <Link href={`/creators/${collection.creatorId}`} className="font-medium text-ink-2 underline-offset-2 hover:underline">
+              {collection.creatorName}
+            </Link>
+          </p>
+          <p className="mt-4 max-w-[90%] text-sm leading-relaxed text-mut">{item.blurb}</p>
 
-      <section className="card overflow-hidden">
-        <div className="grid gap-0 sm:grid-cols-[16rem_1fr]">
-          <ProductTile name={item.name} className="aspect-square w-full sm:h-full" />
-          <div className="p-6">
-            <h2 className="text-2xl font-semibold tracking-tight">{item.name}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mut">{item.blurb}</p>
-            <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
-              <Stat label="Price" value={t.low === t.high ? ngn(t.low) : `${ngn(t.low)} – ${ngn(t.high)}`} />
-              <Stat label="In stock" value={String(t.stock)} tone={t.stock > 0 ? "plain" : "alarm"} />
-              <Stat label="Sold" value={String(t.sold)} />
-              <Stat label="Locations" value={String(t.locations)} />
-            </dl>
-          </div>
+          <FiguresRow className="mt-6">
+            <PageFigure label="Price" value={t.low === t.high ? ngn(t.low) : `${ngn(t.low)} – ${ngn(t.high)}`} first />
+            <PageFigure label="In stock" value={String(t.stock)} tone={t.stock > 0 ? "plain" : "alarm"} />
+            <PageFigure label="Sold" value={String(t.sold)} />
+            <PageFigure label="Locations" value={String(t.locations)} />
+          </FiguresRow>
         </div>
-      </section>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <ProductTile name={item.name} className="size-40 shrink-0 rounded-xl border border-line" />
+      </div>
+
+      <div className="mt-10 grid gap-5 lg:grid-cols-[1fr_1fr]">
         {/* Where it stands, place by place — the same item at different prices. */}
         <Panel
           title="Where it stands"
@@ -147,14 +160,5 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
         </Panel>
       </div>
     </main>
-  );
-}
-
-function Stat({ label, value, tone = "plain" }: { label: string; value: string; tone?: "plain" | "alarm" }) {
-  return (
-    <div>
-      <dt className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-faint">{label}</dt>
-      <dd className={`mt-1 text-lg font-semibold tabular-nums ${tone === "alarm" ? "text-bad" : "text-ink"}`}>{value}</dd>
-    </div>
   );
 }

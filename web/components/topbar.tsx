@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { LedgerIcon, SearchIcon } from "./icons";
+import { MobileNav } from "./mobile-nav";
 
 const TITLES: Record<string, { title: string; sub: string }> = {
   "/": { title: "The ledger", sub: "Overview · read live from the chain" },
@@ -91,12 +92,17 @@ export function Topbar() {
   const here = titleFor(pathname);
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-line bg-surface/80 px-6 backdrop-blur-md">
-      <Link href="/" className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink text-xs font-bold text-white lg:hidden">
-        G
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-surface/80 px-4 backdrop-blur-md sm:gap-4 sm:px-6">
+      {/* The wordmark stands where the rail would have carried it. Below `lg` there is no rail, so
+          without this the product is nameless on the surface a stranger is most likely to meet it on. */}
+      <Link href="/" className="flex shrink-0 items-center gap-2.5 lg:hidden">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ink text-xs font-bold text-white">G</span>
+        <span className="text-[15px] font-semibold tracking-tight text-ink">Glass Ledger</span>
       </Link>
 
-      <div className="min-w-0">
+      {/* Where the page is, in words. Hidden on a phone: the wordmark has the room there, and every
+          page states its own name in its heading a moment below this one. */}
+      <div className="hidden min-w-0 sm:block">
         <div className="flex items-center gap-2 text-sm font-semibold text-ink">
           <LedgerIcon className="hidden size-4 text-faint sm:block" />
           <span className="truncate">{here.title}</span>
@@ -124,11 +130,15 @@ export function Topbar() {
         />
       </form>
 
-      <div className="flex items-center gap-4 md:ml-0 ml-auto">
+      <div className="flex items-center gap-2 md:ml-0 ml-auto sm:gap-4">
         <span className="hidden items-center gap-2 rounded-full border border-line bg-sunken px-3 py-1 text-xs font-medium text-mut sm:flex">
           <span className="size-1.5 rounded-full bg-good-fill" />
           0G Galileo · 16602
         </span>
+
+        {/* Last in the bar, under the thumb — the hand holding the phone reaches this corner, not the
+            far one across the screen. The wordmark keeps the left, where a name belongs. */}
+        <MobileNav onSearch={(q) => router.push(destination(q))} />
       </div>
     </header>
   );

@@ -104,48 +104,53 @@ export function ItemCard({ item }: { item: Item }) {
   );
 }
 
-/** One figure in an account's balance strip: a small-caps label over a tabular number. */
-export function Metric({ label, value, tone = "plain" }: { label: string; value?: string; tone?: "plain" | "good" | "alarm" }) {
-  return (
-    <div>
-      <dt className="text-[0.62rem] font-medium uppercase tracking-[0.12em] text-faint">{label}</dt>
-      {value !== undefined ? (
-        <dd className={`mt-1 text-lg font-semibold tabular-nums ${tone === "good" ? "text-good" : tone === "alarm" ? "text-bad" : "text-ink"}`}>
-          {value}
-        </dd>
-      ) : (
-        <dd className="skeleton mt-1 h-6 w-14" />
-      )}
-    </div>
-  );
-}
-
-/** The sub-section switcher every account page shares: a pill row, counts beside the names. */
+/**
+ * The sub-section switcher every account page shares.
+ *
+ * Tabs that sit *on* the rule rather than floating above it: the chosen one is a tinted tab with a
+ * squared top and a heavy underline that interrupts the hairline, so what follows reads as the inside
+ * of the tab you picked. The rule belongs to this component — a call site places it and adds nothing.
+ *
+ * The tint is ink, not a semantic colour: amber, emerald and red mean things here, and a tab is
+ * furniture, not state.
+ */
 export function Tabs<T extends string>({
   tabs,
   active,
   onChange,
+  right,
 }: {
   tabs: { key: T; label: string; count?: number }[];
   active: T;
   onChange: (key: T) => void;
+  /** An optional note at the far end of the rule — a source, a count, a caveat. */
+  right?: ReactNode;
 }) {
   return (
-    <div className="seg" role="tablist" aria-label="Sections">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          role="tab"
-          aria-selected={active === t.key}
-          data-active={active === t.key}
-          onClick={() => onChange(t.key)}
-          className="seg-btn capitalize"
-        >
-          {t.label}
-          {t.count !== undefined && <span className="ml-1.5 tabular-nums opacity-60">{t.count}</span>}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line">
+      <div className="flex gap-1" role="tablist" aria-label="Sections">
+        {tabs.map((t) => {
+          const on = active === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => onChange(t.key)}
+              className={`-mb-px rounded-t-lg border-b-2 px-4 py-2 text-[13px] capitalize transition-colors ${
+                on
+                  ? "border-ink bg-sunken font-semibold text-ink"
+                  : "border-transparent font-medium text-mut hover:text-ink"
+              }`}
+            >
+              {t.label}
+              {t.count !== undefined && <span className="ml-1.5 tabular-nums opacity-60">{t.count}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {right && <div className="pb-2 text-[13px] text-faint">{right}</div>}
     </div>
   );
 }

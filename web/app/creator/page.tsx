@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DressImage } from "@/components/dress-image";
 import { ItemMoney } from "@/components/entity";
+import { ArrowRightIcon, TagIcon } from "@/components/icons";
 import { itemTone, shelfWord, useLedger } from "@/components/ledger-view";
 import { VerificationReport } from "@/components/report";
 import { Badge, Empty, Panel } from "@/components/ui";
@@ -164,11 +165,7 @@ export default function InspectPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-6 py-8">
       <header>
-        <span className="inline-flex items-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--color-accent-fill)_45%,white)] bg-[color-mix(in_oklab,var(--color-accent-fill)_10%,white)] px-3 py-1 text-xs font-medium text-accent">
-          <span className="size-1.5 rounded-full bg-accent-fill" />
-          Inspect
-        </span>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Scan a tag to inspect the item.</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Scan a tag to inspect the item.</h1>
         <p className="mt-2 leading-relaxed text-mut">
           Point the camera at its QR, or tap the phone to its chip. One scan opens the item&rsquo;s whole record — whether
           it&rsquo;s genuine, whether it has sold, and whether the money reached the creator, the landlord and the
@@ -199,15 +196,27 @@ export default function InspectPage() {
           </div>
         )}
         {nfcNote && <p className="mt-3 text-sm leading-relaxed text-mut">{nfcNote}</p>}
-
-        <p className="mt-3 text-xs leading-relaxed text-faint">
-          No tag in hand?{" "}
-          <Link href="/creator/understand" className="font-medium text-mut underline-offset-2 hover:text-ink hover:underline">
-            Open the wall of tags
-          </Link>{" "}
-          on another screen and scan one — or click through it to see exactly how the check works.
-        </p>
       </Panel>
+
+      {/* No tag in hand — the way in, said plainly. Dashed, because a wall of printed QRs is paperwork. */}
+      <Link
+        href="/creator/understand"
+        className="group flex items-center gap-4 rounded-[var(--radius-inner)] border border-dashed border-line-strong bg-raised/70 p-4 transition-colors hover:bg-raised"
+      >
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sunken text-mut transition-colors group-hover:text-ink">
+          <TagIcon className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-ink">No tag in hand? Open the wall of tags.</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-mut">
+            The shop&rsquo;s whole published set, as printed. Put it on another screen and scan one for real — or click a tag
+            there to watch the check run.
+          </p>
+        </div>
+        <span className="shrink-0 text-faint transition-all group-hover:translate-x-0.5 group-hover:text-ink">
+          <ArrowRightIcon className="size-4" />
+        </span>
+      </Link>
 
       {checking && <Empty>Checking against the chain…</Empty>}
 

@@ -39,6 +39,21 @@ export function untilDeadline(deadline: bigint, now: number): { text: string; ov
     : { text: `overdue by ${duration(-seconds)}`, overdue: true };
 }
 
+/**
+ * How long a window has left, or how long ago it shut.
+ *
+ * Not the same sentence as a debt's deadline, and it must never borrow it. A debt that runs out of time
+ * has *failed* — somebody is late and somebody answers for it. A challenge window that runs out has
+ * simply closed, and closing is the ordinary, expected end: it means nobody objected. Calling that
+ * "overdue" accuses a party who did nothing wrong, and reads as an alarm where there is none.
+ */
+export function windowLeft(deadline: bigint, now: number): { text: string; closed: boolean } {
+  const seconds = Number(deadline) - now;
+  return seconds >= 0
+    ? { text: `${duration(seconds)} left`, closed: false }
+    : { text: `closed ${duration(-seconds)} ago`, closed: true };
+}
+
 function duration(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) return `${s}s`;
@@ -82,6 +97,32 @@ export const DEBT_STATE_MEANING: Record<DebtState, string> = {
   discharged: "Extinguished by performance — the item was delivered, so the refund it guaranteed is owed to nobody.",
   retained: "Good's own commission. The payer and the payee are the same party, so nothing was ever owed outward.",
 };
+
+/**
+ * The buckets the debt census counts in.
+ *
+ * Eight raw states are more than a reader needs, and two of them ("aging" overdue vs not) are the same
+ * state either side of a deadline — so the pages group them. This is the single definition of that
+ * grouping: every census figure and every filter goes through it, which is the only way the number in
+ * the band and the rows in the table can be guaranteed to agree.
+ */
+export type DebtBucket = "inDefault" | "clock" | "proven" | "commission" | "resolved";
+
+export function debtBucket(debt: { state: DebtState; deadline: bigint }, now: number): DebtBucket {
+  if (debt.state === "aging" && untilDeadline(debt.deadline, now).overdue) return "inDefault";
+  if (debt.state === "aging" || debt.state === "claimed" || debt.state === "settled") return "clock";
+  if (debt.state === "proven") return "proven";
+  if (debt.state === "retained") return "commission";
+  return "resolved";
+}
+
+export const DEBT_BUCKETS: { value: DebtBucket; label: string }[] = [
+  { value: "inDefault", label: "In default" },
+  { value: "clock", label: "On the clock" },
+  { value: "proven", label: "Proven" },
+  { value: "commission", label: "Commission" },
+  { value: "resolved", label: "Resolved" },
+];
 
 /** The life of a claim. */
 export const CLAIM_STATES = ["none", "pending", "challenged", "settled", "proven", "voided"] as const;

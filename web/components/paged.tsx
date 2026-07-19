@@ -25,6 +25,8 @@ export function usePaged<T>(items: T[], size = 10) {
     total: items.length,
     next: () => setPage((p) => Math.min(pages - 1, p + 1)),
     prev: () => setPage((p) => Math.max(0, p - 1)),
+    first: () => setPage(0),
+    goto: (p: number) => setPage(Math.min(pages - 1, Math.max(0, p))),
   };
 }
 

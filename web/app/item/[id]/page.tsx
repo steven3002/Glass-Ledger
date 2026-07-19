@@ -15,6 +15,7 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
+import { FiguresRow, PageFigure } from "@/components/browse";
 import { DressImage } from "@/components/dress-image";
 import { Fact, Facts, ItemMoney, Paperwork, WhoLink } from "@/components/entity";
 import {
@@ -189,21 +190,13 @@ function Masthead({
             )}
           </div>
           {item ? (
-            <h1 className="mt-1.5 text-3xl font-semibold tracking-tight">{item.name}</h1>
+            <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight">
+              {item.name}
+              <Badge tone={itemTone(item.state)}>{shelfWord(item.state)}</Badge>
+            </h1>
           ) : (
             <Skeleton className="mt-2 h-8 w-40" />
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            {item && (
-              <>
-                <span className="text-2xl font-semibold tabular-nums text-ink">{naira(item.price)}</span>
-                <Badge tone={itemTone(item.state)} dot>
-                  {shelfWord(item.state)}
-                </Badge>
-              </>
-            )}
-            <span className="font-mono text-xs text-faint">item {String(itemId)}</span>
-          </div>
           {consignment && tranche && (
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-mut">
               Signed by{" "}
@@ -214,6 +207,13 @@ function Masthead({
               {when(tranche.postedAt)}.
             </p>
           )}
+
+          <FiguresRow className="mt-6">
+            <PageFigure label="Price" value={item ? naira(item.price) : undefined} first />
+            <PageFigure label="Item" value={String(itemId)} />
+            {tranche && <PageFigure label="Consignment" value={`#${String(tranche.id)}`} />}
+            {tranche && <PageFigure label="Location" value={tranche.location} />}
+          </FiguresRow>
         </div>
 
         {tag && (

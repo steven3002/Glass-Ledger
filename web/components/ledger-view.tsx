@@ -16,13 +16,16 @@ import { Pager, usePaged } from "@/components/paged";
 import { Badge, Bytes, Delta, Empty, Gauge, Meter, Panel, Skeleton, StatCard } from "@/components/ui";
 import { deployment } from "@/lib/chain";
 import {
+  DEBT_BUCKETS,
   DEBT_STATE_MEANING,
   ROLES,
   age,
+  debtBucket,
   naira,
   shortAddress,
   untilDeadline,
   when,
+  type DebtBucket,
   type Role,
 } from "@/lib/format";
 import { readCage, readHistory, readHoldings, type Cage, type History, type Holdings } from "@/lib/ledger";
@@ -69,12 +72,12 @@ export function useLedger(): Ledger {
 
 /* ---- Page furniture ------------------------------------------------------------------------------- */
 
-export function PageHeader({ title, sub, right }: { title: string; sub: React.ReactNode; right?: React.ReactNode }) {
+export function PageHeader({ title, sub, right }: { title: string; sub?: React.ReactNode; right?: React.ReactNode }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-1 text-sm text-mut">{sub}</p>
+        {sub && <p className="mt-1 text-sm text-mut">{sub}</p>}
       </div>
       {right}
     </header>
@@ -89,35 +92,22 @@ export function ChainError({ problem }: { problem: string }) {
   );
 }
 
-export function RoleFilter({ role, setRole }: { role: Role | "everyone"; setRole: (r: Role | "everyone") => void }) {
-  return (
-    <div className="seg" role="tablist" aria-label="Filter by who is owed">
-      {(["everyone", ...ROLES] as const).map((each) => (
-        <button
-          key={each}
-          type="button"
-          role="tab"
-          aria-selected={role === each}
-          data-active={role === each}
-          onClick={() => setRole(each)}
-          className="seg-btn capitalize"
-        >
-          {each === "everyone" ? "everyone" : `the ${each}`}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** The loud, immediate answer to picking a persona — otherwise the filter's effect is below the fold. */
-export function RoleSummary({
+/**
+ * What you are looking at, said before the table says it.
+ *
+ * Sky, not amber/emerald/red: those three name states the ledger proved, and this strip proves nothing
+ * — it is the page explaining its own filter. It shows for "everyone" too, because the commission line
+ * is the part a stranger most needs and it would otherwise only appear if they happened to pick the
+ * operator.
+ */
+export function DebtSummary({
   role,
   debts,
   now,
   loading,
   onClear,
 }: {
-  role: Role;
+  role: Role | "everyone";
   debts: Holdings["debts"];
   now: number;
   loading: boolean;
@@ -126,44 +116,53 @@ export function RoleSummary({
   const inDefault = debts.filter((d) => d.state === "aging" && untilDeadline(d.deadline, now).overdue).length;
   const owedDebts = debts.filter((d) => d.state === "aging" || d.state === "claimed" || d.state === "settled");
   const owed = owedDebts.reduce((sum, d) => sum + d.amount, 0n);
-  const commission = debts.filter((d) => d.state === "retained").reduce((sum, d) => sum + d.amount, 0n);
+  const kept = debts.filter((d) => d.state === "retained");
+  const commission = kept.reduce((sum, d) => sum + d.amount, 0n);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-[color-mix(in_oklab,var(--color-accent-fill)_35%,white)] bg-[color-mix(in_oklab,var(--color-accent-fill)_8%,white)] px-4 py-3 text-sm">
-      <span className="inline-flex items-center gap-2 font-medium text-ink">
-        <span className="size-1.5 rounded-full bg-accent-fill" />
-        Showing <span className="capitalize">the {role}</span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-[color-mix(in_oklab,var(--color-info-fill)_38%,white)] bg-[color-mix(in_oklab,var(--color-info-fill)_9%,white)] px-4 py-3 text-sm">
+      <span className="font-medium text-ink">
+        Showing {role === "everyone" ? "everyone" : <span className="capitalize">the {role}</span>}
       </span>
-      <span className="text-mut">
+      <span className="min-w-0 text-mut">
         {loading ? (
-          "reading…"
-        ) : owedDebts.length > 0 ? (
+          "reading\u2026"
+        ) : (
           <>
-            owed <span className="font-semibold text-ink">{naira(owed)}</span> across {owedDebts.length}{" "}
-            {owedDebts.length === 1 ? "debt" : "debts"}
-            {inDefault > 0 && (
+            {owedDebts.length > 0 ? (
               <>
-                {" · "}
-                <span className="font-semibold text-bad">{inDefault} in default</span>
+                owed <span className="font-semibold text-ink">{naira(owed)}</span> across {owedDebts.length}{" "}
+                {owedDebts.length === 1 ? "debt" : "debts"}
+                {inDefault > 0 && (
+                  <>
+                    {" \u00b7 "}
+                    <span className="font-semibold text-bad">{inDefault} in default</span>
+                  </>
+                )}
+              </>
+            ) : (
+              <>owed nothing outward right now</>
+            )}
+            {kept.length > 0 && (
+              <>
+                {owedDebts.length > 0 ? " \u00b7 " : " \u2014 "}
+                {kept.length} of these {kept.length === 1 ? "is" : "are"}{" "}
+                Good&rsquo;s own commission (
+                <span className="font-semibold text-ink">{naira(commission)}</span>), which it pays itself
               </>
             )}
           </>
-        ) : commission > 0n ? (
-          <>
-            owed nothing outward — the {debts.length} {debts.length === 1 ? "row" : "rows"} below{" "}
-            {debts.length === 1 ? "is" : "are"} Good&rsquo;s own commission ({naira(commission)}), which it pays itself
-          </>
-        ) : (
-          <>owed nothing right now</>
         )}
       </span>
-      <button
-        type="button"
-        onClick={onClear}
-        className="ml-auto rounded-full border border-line-strong bg-surface px-3 py-1 text-xs font-medium text-mut transition-colors hover:text-ink"
-      >
-        show everyone
-      </button>
+      {role !== "everyone" && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="ml-auto border border-line-strong bg-surface px-3 py-1 text-xs font-medium text-mut transition-colors hover:text-ink"
+        >
+          show everyone
+        </button>
+      )}
     </div>
   );
 }
@@ -187,21 +186,30 @@ export function CageRow({ cage }: { cage: Cage }) {
         className="card relative overflow-hidden p-6"
         style={{ boxShadow: "var(--shadow-pop)", ...(shut ? { background: "linear-gradient(180deg,color-mix(in oklab,var(--color-bad-fill) 5%,white),white)" } : {}) }}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">Good&rsquo;s cage</h2>
-            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-mut">
-              How much of other people&rsquo;s money Good holds, against how much it is allowed to.
-            </p>
-          </div>
-          <Badge tone={shut ? "alarm" : "good"} dot>{shut ? "till shut for cash" : "room to sell"}</Badge>
+        {/* The verdict sits on the heading's line, and the sentence explaining the cage runs the full
+            width beneath both. Held beside the paragraph instead, it squeezed that paragraph into a
+            gutter on a phone — the narrower the screen, the more room the two words took from it. */}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">Good&rsquo;s cage</h2>
+          <span className={`shrink-0 text-sm font-medium ${shut ? "text-bad" : "text-good"}`}>
+            {shut ? "till shut for cash" : "room to sell"}
+          </span>
+          <p className="mt-1.5 w-full max-w-md text-sm leading-relaxed text-mut">
+            How much of other people&rsquo;s money Good holds, against how much it is allowed to.
+          </p>
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-x-8 gap-y-6">
           <div>
             <div className="text-[0.7rem] font-medium uppercase tracking-[0.12em] text-faint">Headroom</div>
-            <div className="mt-1 flex flex-wrap items-baseline gap-3">
-              <span className={`text-[2.75rem] font-semibold leading-none tabular-nums tracking-[-0.02em] ${shut ? "text-bad" : "text-good"}`}>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {/* Stepped down on a phone: at 2.75rem a figure like ₦445,393.75 measures wider than the
+                  card it sits in, and a headline number that touches both walls reads as a mistake. */}
+              <span
+                className={`text-[2rem] font-semibold leading-none tabular-nums tracking-[-0.02em] sm:text-[2.75rem] ${
+                  shut ? "text-bad" : "text-good"
+                }`}
+              >
                 {naira(ceiling.headroom)}
               </span>
               <Delta tone={shut ? "alarm" : "good"}>{shut ? "0 left" : "for the next cash sale"}</Delta>
@@ -211,7 +219,10 @@ export function CageRow({ cage }: { cage: Cage }) {
               <Support label="Being held" value={naira(ceiling.used)} />
             </div>
           </div>
-          <Gauge pct={freePct} tone={shut ? "alarm" : "good"} caption="of the cage is free to sell for cash" />
+          {/* Wrapped onto a line of its own, the dial centres rather than hanging off the left edge. */}
+          <div className="mx-auto sm:mx-0">
+            <Gauge pct={freePct} tone={shut ? "alarm" : "good"} caption="of the cage is free to sell for cash" />
+          </div>
         </div>
 
         <div className="mt-6">
@@ -320,20 +331,29 @@ export function WriteOffs({ writeOffs }: { writeOffs: History["writeOffs"] }) {
 /* ---- Stage 2: debts, shelf, claims ---------------------------------------------------------------- */
 
 export function Debts({ debts, now, role }: { debts: Holdings["debts"]; now: number; role: Role | "everyone" }) {
+  const [bucket, setBucket] = useState<DebtBucket | "all">("all");
+
   const census = debts.reduce(
     (acc, d) => {
-      const overdue = untilDeadline(d.deadline, now).overdue;
-      if (d.state === "aging" && overdue) acc.default += 1;
-      else if (d.state === "aging" || d.state === "claimed" || d.state === "settled") acc.clock += 1;
-      else if (d.state === "proven") acc.proven += 1;
-      else if (d.state === "retained") acc.commission += 1;
-      else acc.resolved += 1;
+      acc[debtBucket(d, now)] += 1;
       return acc;
     },
-    { default: 0, clock: 0, proven: 0, commission: 0, resolved: 0 },
+    { inDefault: 0, clock: 0, proven: 0, commission: 0, resolved: 0 } as Record<DebtBucket, number>,
   );
 
-  const paged = usePaged(debts, 8);
+  const rows = bucket === "all" ? debts : debts.filter((d) => debtBucket(d, now) === bucket);
+  const paged = usePaged(rows, 8);
+
+  // The census doubles as the filter: the counts are the buckets, so the number you are curious about
+  // is the thing you click. Picking one again clears it.
+  const pick = (b: DebtBucket) => setBucket((current) => (current === b ? "all" : b));
+  const tones: Record<DebtBucket, "alarm" | "warn" | "good" | "quiet"> = {
+    inDefault: "alarm",
+    clock: "warn",
+    proven: "good",
+    commission: "quiet",
+    resolved: "quiet",
+  };
 
   return (
     <section className="card p-5 sm:p-6">
@@ -342,16 +362,29 @@ export function Debts({ debts, now, role }: { debts: Holdings["debts"]; now: num
           <h2 className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">Debts</h2>
           <p className="mt-1.5 text-sm text-mut">Who is owed what, and for how long. Time runs one way: a debt never expires into paid.</p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {census.default > 0 && <Badge tone="alarm" dot>{census.default} in default</Badge>}
-          {census.clock > 0 && <Badge tone="warn" dot>{census.clock} on the clock</Badge>}
-          {census.proven > 0 && <Badge tone="good" dot>{census.proven} proven</Badge>}
-          {census.commission > 0 && <Badge tone="quiet">{census.commission} commission</Badge>}
-          {census.resolved > 0 && <Badge tone="quiet">{census.resolved} resolved</Badge>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {DEBT_BUCKETS.filter((b) => census[b.value] > 0).map((b) => (
+            <button
+              key={b.value}
+              type="button"
+              onClick={() => pick(b.value)}
+              aria-pressed={bucket === b.value}
+              title={bucket === b.value ? "Showing only these — click to clear" : `Show only ${b.label.toLowerCase()}`}
+              className={`transition-opacity ${bucket !== "all" && bucket !== b.value ? "opacity-40 hover:opacity-70" : ""}`}
+            >
+              <span className={bucket === b.value ? "outline outline-1 outline-offset-2 outline-line-strong" : ""}>
+                <Badge tone={tones[b.value]}>
+                  {census[b.value]} {b.label.toLowerCase()}
+                </Badge>
+              </span>
+            </button>
+          ))}
         </div>
       </header>
       {debts.length === 0 ? (
         <Empty>Nothing is owed to {role === "everyone" ? "anybody" : `the ${role}`}.</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>Nothing in that state. Pick the tag again to see them all.</Empty>
       ) : (
         <>
           <ul className="space-y-1.5">
@@ -479,13 +512,30 @@ export function WhatHappened({ entries }: { entries: History["entries"] }) {
  * The narrated log, as a list — the same sentences everywhere they appear, because a dossier's
  * timeline and the global history must never disagree about what happened.
  */
-export function Timeline({ entries, empty, size = 12 }: { entries: History["entries"]; empty: string; size?: number }) {
+export function Timeline({
+  entries,
+  empty,
+  size = 12,
+  capped = false,
+}: {
+  entries: History["entries"];
+  empty: string;
+  size?: number;
+  /**
+   * Show only the first three on a phone.
+   *
+   * For a feed that is a *sample* with a link onward, never one a pager is counting: a cap under a
+   * pager reading "1–12 of 152" would be the page contradicting itself. Safe here because `Pager`
+   * renders nothing while `total <= size`.
+   */
+  capped?: boolean;
+}) {
   const paged = usePaged(entries, size);
   return entries.length === 0 ? (
     <Empty>{empty}</Empty>
   ) : (
     <>
-      <ol className="space-y-3">
+      <ol className={`space-y-3 ${capped ? "gl-cap-3" : ""}`}>
         {paged.slice.map((entry) => (
           <li key={entry.key} className="flex gap-3">
             <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: dotColor(entry.tone) }} />
@@ -576,7 +626,7 @@ function Mini({ label, value, tone = "plain" }: { label: string; value: string; 
   );
 }
 
-function badgeTone(state: string, overdue: boolean): "alarm" | "good" | "warn" | "quiet" | "plain" {
+export function badgeTone(state: string, overdue: boolean): "alarm" | "good" | "warn" | "quiet" | "plain" {
   if (overdue && state === "aging") return "alarm";
   if (state === "defaulted") return "alarm";
   if (state === "proven") return "good";
@@ -610,7 +660,7 @@ export function shelfWord(state: string): string {
   }
 }
 
-function claimTone(state: string): "alarm" | "warn" | "good" | "plain" {
+export function claimTone(state: string): "alarm" | "warn" | "good" | "plain" {
   if (state === "voided") return "alarm";
   if (state === "challenged") return "warn";
   if (state === "proven") return "good";

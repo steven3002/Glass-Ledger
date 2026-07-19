@@ -12,54 +12,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import {
-  CaretDownIcon,
-  GlobeIcon,
-  LedgerIcon,
-  SidebarIcon,
-  StackIcon,
-  StorefrontIcon,
-  TagIcon,
-  UserIcon,
-  UsersIcon,
-} from "./icons";
-
-const LEDGER_TREE = [
-  { href: "/debts", name: "Debts" },
-  { href: "/shelf", name: "The shelf" },
-  { href: "/claims", name: "Claims" },
-  { href: "/history", name: "What happened" },
-];
-
-/** The rest of the map, grouped by what a visitor is looking at: things, then people. */
-const GROUPS = [
-  {
-    label: "The goods",
-    links: [
-      { href: "/collections", name: "Collections", Icon: StackIcon },
-      { href: "/map", name: "The map", Icon: GlobeIcon },
-      { href: "/creator", name: "Inspect", Icon: TagIcon },
-    ],
-  },
-  {
-    label: "The people",
-    links: [
-      { href: "/creators", name: "Creators", Icon: UserIcon },
-      { href: "/landlords", name: "Landlords", Icon: StorefrontIcon },
-      { href: "/community", name: "Community", Icon: UsersIcon },
-    ],
-  },
-];
+import { CaretDownIcon, LedgerIcon, SidebarIcon } from "./icons";
+import { GROUPS, LEDGER_TREE, isActive, onLedgerPath } from "./nav-map";
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [treeOpen, setTreeOpen] = useState(true);
+  const [treeOpen, setTreeOpen] = useState(false);
 
   // Remembered across visits — preferences, not states the page derives.
   useEffect(() => {
     setCollapsed(localStorage.getItem("gl-sidebar") === "collapsed");
-    setTreeOpen(localStorage.getItem("gl-ledger-tree") !== "closed");
+    // Folded by default — the reader unfolds the ledger's pages themselves; only a remembered "open" lifts it.
+    setTreeOpen(localStorage.getItem("gl-ledger-tree") === "open");
   }, []);
 
   // A page can ask the rail to fold — the map does, so a click on the world gives the world the room.
@@ -97,7 +62,7 @@ export function Sidebar() {
     localStorage.setItem("gl-ledger-tree", next ? "open" : "closed");
   };
 
-  const onLedger = pathname === "/" || LEDGER_TREE.some((t) => pathname.startsWith(t.href));
+  const onLedger = onLedgerPath(pathname);
 
   return (
     <aside
@@ -189,8 +154,7 @@ export function Sidebar() {
                 </p>
               )}
               {group.links.map(({ href, name, Icon }) => {
-                // A boundary, not a prefix: "/creator" must stay dark while you read "/creators/1".
-                const active = pathname === href || pathname.startsWith(`${href}/`);
+                const active = isActive(pathname, href);
                 return (
                   <Link
                     key={href}

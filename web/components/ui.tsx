@@ -103,30 +103,23 @@ const BADGE_TONES = {
   quiet: "border-line bg-sunken text-faint",
 } as const;
 
-const DOT_TONES = {
-  plain: "bg-mut",
-  good: "bg-good-fill",
-  warn: "bg-accent-fill",
-  alarm: "bg-bad-fill",
-  quiet: "bg-faint",
-} as const;
-
+/**
+ * A state, said in a plain rectangle.
+ *
+ * The colour carries the meaning — amber is the shop's own signal, emerald is proven, red is
+ * defaulted — and nothing else decorates it: no pill, no dot. `dot` is accepted and ignored so old
+ * call sites keep reading naturally.
+ */
 export function Badge({
   children,
   tone = "plain",
-  dot = false,
 }: {
   children: ReactNode;
   tone?: keyof typeof BADGE_TONES;
   dot?: boolean;
 }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${BADGE_TONES[tone]}`}
-    >
-      {dot && <span className={`size-1.5 rounded-full ${DOT_TONES[tone]}`} aria-hidden />}
-      {children}
-    </span>
+    <span className={`inline-block border px-2 py-0.5 text-[11px] font-semibold ${BADGE_TONES[tone]}`}>{children}</span>
   );
 }
 

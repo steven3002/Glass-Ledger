@@ -16,15 +16,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import {
-  CageRow,
-  CageRowSkeleton,
-  ChainError,
-  PageHeader,
-  Timeline,
-  useLedger,
-  WriteOffs,
-} from "@/components/ledger-view";
+import { CageRow, CageRowSkeleton, ChainError, PageHeader, Timeline, useLedger } from "@/components/ledger-view";
 import { Badge, Panel, Skeleton } from "@/components/ui";
 import { naira, shortAddress } from "@/lib/format";
 import type { Cage, Holdings } from "@/lib/ledger";
@@ -55,7 +47,7 @@ export default function Overview() {
 
   return (
     <main className="mx-auto max-w-[1500px] space-y-5 p-6 lg:p-8">
-      <PageHeader title="The ledger" sub="Read live from the chain. Nothing on this page comes from the shop." />
+      <PageHeader title="The ledger" />
 
       {/* The counts band — a block explorer's headline row, every tile a door. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
@@ -73,7 +65,6 @@ export default function Overview() {
       </div>
 
       {cage ? <CageRow cage={cage} /> : <CageRowSkeleton />}
-      {history && <WriteOffs writeOffs={history.writeOffs} />}
 
       {/* The live record, beside what is selling. */}
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
@@ -83,8 +74,10 @@ export default function Overview() {
         >
           {history ? (
             <>
-              <Timeline entries={history.entries.slice(0, 12)} empty="Nothing has happened yet." />
-              {history.entries.length > 12 && (
+              <Timeline entries={history.entries.slice(0, 12)} empty="Nothing has happened yet." capped />
+              {/* Offered from four up, because a phone shows three: the threshold has to be the one
+                  that bites on the narrowest screen, or the cap would strand a reader with no way on. */}
+              {history.entries.length > 3 && (
                 <Link href="/history" className="mt-4 inline-flex items-center text-sm font-medium text-mut transition-colors hover:text-ink">
                   View all {history.entries.length} events →
                 </Link>
@@ -182,7 +175,7 @@ function Trending({ holdings }: { holdings?: Holdings }) {
         <p className="py-6 text-center text-sm text-faint">No consignment posted yet.</p>
       ) : (
         <>
-          <ul className="space-y-1">
+          <ul className="space-y-1 gl-cap-3">
             {rows.map(({ t, sales }, i) => (
               <RankRow
                 key={String(t.id)}
@@ -221,7 +214,7 @@ function HitLocations({ holdings }: { holdings?: Holdings }) {
         <p className="py-6 text-center text-sm text-faint">No location named yet.</p>
       ) : (
         <>
-          <ul className="space-y-1">
+          <ul className="space-y-1 gl-cap-3">
             {rows.map(([name, g], i) => (
               <RankRow
                 key={name}
@@ -251,7 +244,7 @@ function TopCommunities({ holdings }: { holdings?: Holdings }) {
         <p className="py-6 text-center text-sm text-faint">No referral has minted yet.</p>
       ) : (
         <>
-          <ul className="space-y-1">
+          <ul className="space-y-1 gl-cap-3">
             {rows.map((p, i) => (
               <RankRow
                 key={p.address}
@@ -279,7 +272,7 @@ function Creators({ cage, holdings }: { cage?: Cage; holdings?: Holdings }) {
         <p className="py-6 text-center text-sm text-faint">Nobody has registered yet.</p>
       ) : (
         <>
-          <ul className="space-y-1">
+          <ul className="space-y-1 gl-cap-3">
             {cage.capacity.map((row, i) => {
               const purse = purseOf((holdings?.debts ?? []).filter((d) => d.role === "creator" && d.creatorId === row.creatorId));
               const shut = row.headroom === 0n;

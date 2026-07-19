@@ -81,15 +81,9 @@ export default function UnderstandPage() {
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 px-6 py-8">
       <header>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--color-accent-fill)_45%,white)] bg-[color-mix(in_oklab,var(--color-accent-fill)_10%,white)] px-3 py-1 text-xs font-medium text-accent">
-            <span className="size-1.5 rounded-full bg-accent-fill" />
-            Inspect · how it works
-          </span>
-          <Link href="/creator" className="text-sm font-medium text-mut transition-colors hover:text-ink">
-            ← back to the scanner
-          </Link>
-        </div>
+        <Link href="/creator" className="text-sm font-medium text-mut transition-colors hover:text-ink">
+          ← back to the scanner
+        </Link>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">How a tag proves itself</h1>
         <p className="mt-2 max-w-3xl leading-relaxed text-mut">
           The shop&rsquo;s whole published set, as printed. Point a phone with{" "}

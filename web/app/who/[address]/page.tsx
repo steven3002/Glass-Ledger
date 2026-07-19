@@ -1,24 +1,30 @@
 "use client";
 
 /**
- * One address, as an account.
+ * One address, as an account — wearing the theme the creator's page sets.
  *
- * Same arrangement as the creator's: an identity-and-balance header, then the address's business as
- * sub-sections under a tab bar. What leads depends on what the address *is* — a landlord's locations,
- * otherwise the money owed to them — but the header is constant, and it leads with the one signed act
- * the protocol asks of any recipient: the payout account they put on file *from their own key*. That
- * hash is what every settlement proof must name; no account on file means Good cannot even post a claim
- * of having paid them. This page is derived, never registered — an address is what the ledger proves.
+ * The name flush and large, the identity and the one signed act side by side, the figures ruled apart
+ * rather than boxed, the tabs ruled off, and the headline sub-section first. What the name *is* depends
+ * on what the address turned out to be: a landlord is called by the places he hosts, a referrer by the
+ * address itself, because the protocol has no names for either.
+ *
+ * The right-hand object is the counterpart of the creator's till: the payout account on file. It is the
+ * only thing the protocol ever asks of a recipient, and they must write it *from their own key* — that
+ * hash is what every settlement proof must name, and no account on file means Good cannot even post a
+ * claim of having paid them. This page is derived, never registered: an address is what the ledger proves.
  */
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
-import { Fact, Facts, Metric, Plate, Tabs, WhoLink } from "@/components/entity";
-import { CardSkeleton, ChainError, Debts, PageHeader, Timeline, useLedger } from "@/components/ledger-view";
-import { Badge, Bytes, Empty, Panel } from "@/components/ui";
+import { FiguresRow, PageFigure } from "@/components/browse";
+import { Plate, Tabs } from "@/components/entity";
+import { CardSkeleton, ChainError, Debts, Timeline, useLedger } from "@/components/ledger-view";
+import { ProductTile } from "@/components/product";
+import { Badge, Bytes, Empty, Panel, Skeleton } from "@/components/ui";
 import { abi, deployment, NGN, publicClient } from "@/lib/chain";
-import { naira, untilDeadline, when } from "@/lib/format";
+import { naira, shortAddress, untilDeadline, when } from "@/lib/format";
+import type { Entry } from "@/lib/ledger";
 import type { Profile } from "@/lib/ledger/profiles";
 import { linesAbout, profileOf } from "@/lib/ledger/profiles";
 
@@ -73,97 +79,169 @@ export default function WhoPage({ params }: { params: Promise<{ address: string 
   const lines =
     history && profile ? linesAbout(history.entries, { address, debtIds: new Set(profile.debts.map((d) => d.id)) }) : [];
 
-  const onFile = accountHash !== undefined && accountHash !== ZERO;
   const overdueNow = profile?.debts.filter((d) => d.state === "aging" && untilDeadline(d.deadline, now).overdue).length ?? 0;
   const hosts = (profile?.tranches.length ?? 0) > 0;
+  const places = [...new Set((profile?.tranches ?? []).map((t) => t.location))];
+  const who = identity(profile, places);
 
   // Locations lead when the address hosts any; otherwise the money it's owed does.
   const active: Tab = tab === "locations" && !hosts ? "debts" : tab;
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    ...(hosts ? [{ key: "locations" as const, label: "locations", count: profile?.tranches.length }] : []),
+    ...(hosts ? [{ key: "locations" as const, label: "locations", count: places.length }] : []),
     { key: "debts", label: "debts", count: profile ? profile.debts.length : undefined },
     { key: "activity", label: "activity", count: history ? lines.length : undefined },
   ];
 
   return (
-    <main className="mx-auto max-w-[1200px] space-y-5 p-6 lg:p-8">
-      <PageHeader title="Profile" sub="Derived, never registered: an address, the roles its money gave it, and what the ledger can prove." />
-
-      <section className="card p-6">
-        {profile ? (
-          <>
-            <Plate address={profile.address} roles={profile.roles} />
-
-            <div className="mt-5 border-t border-line pt-5">
-              <Facts>
-                <Fact label="Account on file" wide>
-                  {accountHash === undefined ? (
-                    <span className="text-mut">asking the chain…</span>
-                  ) : onFile ? (
-                    <span className="flex flex-wrap items-center gap-2">
-                      <Badge tone="good" dot>
-                        on file
-                      </Badge>
-                      <Bytes>{accountHash}</Bytes>
-                    </span>
-                  ) : (
-                    <span className="flex flex-wrap items-center gap-2">
-                      <Badge tone="warn" dot>
-                        none
-                      </Badge>
-                      <span className="text-mut">no payout account is on file for NGN — Good cannot even post a claim of having paid them.</span>
-                    </span>
-                  )}
-                </Fact>
-                {onFile && (
-                  <Fact label="Who wrote it" wide>
-                    <span className="text-mut">
-                      they did, from their own key{filed ? ` — ${when(filed.at)}` : ""}. Nobody else may: a shop that could
-                      name the account would be asserting the fact it is supposed to prove. Every settlement proof about their
-                      debts must name this hash.
-                    </span>
-                  </Fact>
-                )}
-              </Facts>
-            </div>
-
-            <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-4">
-              <Metric label="Ever minted" value={naira(profile.purse.minted)} />
-              <Metric label="Owed now" value={naira(profile.purse.owedNow)} />
-              <Metric label="Proven paid" value={naira(profile.purse.proven)} tone="good" />
-              <Metric label="In default" value={String(overdueNow)} tone={overdueNow > 0 || profile.purse.defaultedCount > 0 ? "alarm" : "plain"} />
-            </dl>
-          </>
-        ) : (
-          <CardSkeleton rows={3} />
-        )}
-      </section>
-
-      {profile && <Tabs tabs={tabs} active={active} onChange={setTab} />}
-
-      {active === "locations" && profile && <Locations profile={profile} />}
-      {active === "debts" &&
-        (holdings && profile ? (
-          profile.debts.length > 0 ? (
-            <Debts debts={profile.debts} now={now} role="everyone" />
-          ) : (
-            <Panel title="Debts">
-              <Empty>No leg has ever been minted to this address.</Empty>
-            </Panel>
-          )
-        ) : (
-          <CardSkeleton rows={4} tall />
-        ))}
-      {active === "activity" && (
-        <Panel title="Their lines of the record" hint="The public history, cut down to what is this address's business.">
-          {history ? (
-            <Timeline entries={lines} empty="The record has never mentioned this address." />
-          ) : (
-            <CardSkeleton rows={4} />
-          )}
-        </Panel>
+    <main className="mx-auto max-w-[1200px] px-6 pt-8 pb-14 sm:px-10 lg:px-12">
+      {/* Header: what the ledger made them, and the one thing they signed for themselves. */}
+      <nav className="text-xs font-medium tracking-wide text-faint">
+        <Link href={who.crumb.href} className="transition-colors hover:text-ink">
+          {who.crumb.label}
+        </Link>
+        <span className="mx-1.5">•</span>
+        <span className="text-mut">{shortAddress(address)}</span>
+      </nav>
+      {who.title && (
+        <>
+          <h1 className="mt-1.5 text-[32px] font-bold tracking-tight text-ink">{who.title}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-mut">{who.sub}</p>
+        </>
       )}
+
+      <div className={`flex flex-wrap items-start justify-between gap-8 ${who.title ? "mt-8" : "mt-5"}`}>
+        {/* The identity column: who they are, what that means, and what it added up to. */}
+        <div className="min-w-0 flex-1">
+          {profile ? (
+            <>
+              <Plate address={profile.address} roles={profile.roles} />
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-mut">
+                Nobody registered this profile — the roles are the roles their money gave them, and every figure below is
+                derived from the same public facts the rest of the ledger reads. The one act asked of them is beside this:
+                naming their own payout account, because a shop that could write it would be asserting the very fact it has
+                to prove.
+              </p>
+
+              <FiguresRow className="mt-6">
+                {hosts && <PageFigure label="Locations" value={String(places.length)} first />}
+                {hosts && <PageFigure label="Consignments" value={String(profile.tranches.length)} />}
+                {profile.roles.includes("community") && (
+                  <PageFigure label="Referrals" value={String(profile.purse.mintedCount)} first />
+                )}
+                <PageFigure
+                  label="Ever minted"
+                  value={naira(profile.purse.minted)}
+                  first={!hosts && !profile.roles.includes("community")}
+                />
+                <PageFigure label="Owed now" value={naira(profile.purse.owedNow)} />
+                <PageFigure label="Proven paid" value={naira(profile.purse.proven)} tone="good" />
+                <PageFigure
+                  label="In default"
+                  value={String(overdueNow + profile.purse.defaultedCount)}
+                  tone={overdueNow > 0 || profile.purse.defaultedCount > 0 ? "alarm" : "plain"}
+                />
+              </FiguresRow>
+            </>
+          ) : (
+            <Skeleton className="h-40 w-full max-w-xl" />
+          )}
+        </div>
+        <Account hash={accountHash} filed={filed} />
+      </div>
+
+      {/* The sub-sections, what they host first — ruled off. */}
+      <div className="mt-12">
+        {profile ? <Tabs tabs={tabs} active={active} onChange={setTab} /> : <Skeleton className="h-8 w-56" />}
+      </div>
+
+      <div className="mt-6">
+        {active === "locations" && profile && <Locations profile={profile} />}
+        {active === "debts" &&
+          (holdings && profile ? (
+            profile.debts.length > 0 ? (
+              <Debts debts={profile.debts} now={now} role="everyone" />
+            ) : (
+              <Panel title="Debts">
+                <Empty>No leg has ever been minted to this address.</Empty>
+              </Panel>
+            )
+          ) : (
+            <CardSkeleton rows={4} tall />
+          ))}
+        {active === "activity" && (
+          <Panel title="Their lines of the record" hint="The public history, cut down to what is this address's business.">
+            {history ? (
+              <Timeline entries={lines} empty="The record has never mentioned this address." />
+            ) : (
+              <CardSkeleton rows={4} />
+            )}
+          </Panel>
+        )}
+      </div>
     </main>
+  );
+}
+
+/* ---- Who the ledger made them ------------------------------------------------------------------- */
+
+/**
+ * The parent page, and — only where there is one — a name.
+ *
+ * A landlord has one: the places he hosts, which is what anybody actually calls him. Nobody else does,
+ * and a shortened address set in 32px over the same address written out in full below it says nothing
+ * twice. So for everyone else the title is dropped and the nameplate carries the identity alone.
+ */
+function identity(
+  profile: Profile | undefined,
+  places: string[],
+): { crumb: { href: string; label: string }; title?: string; sub?: string } {
+  if (places.length > 0) {
+    const n = profile?.tranches.length ?? 0;
+    return {
+      crumb: { href: "/landlords", label: "Landlords" },
+      title: places.join(" · "),
+      sub: `The address a creator's consignment named as landlord — ${n} ${
+        n === 1 ? "consignment" : "consignments"
+      } standing here, and everything the 5% legs proved around them.`,
+    };
+  }
+
+  if (profile?.roles.includes("community")) return { crumb: { href: "/community", label: "Community" } };
+
+  return { crumb: { href: "/", label: "The ledger" } };
+}
+
+/* ---- The account on file: their side of the bargain, kept as its own object ----------------------- */
+
+function Account({ hash, filed }: { hash?: string; filed?: Entry }) {
+  const onFile = hash !== undefined && hash !== ZERO;
+
+  return (
+    <div className="w-full rounded-xl border border-line bg-sunken/60 p-4 lg:w-72">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-faint">Payout account on file</span>
+        {hash !== undefined && <Badge tone={onFile ? "good" : "warn"}>{onFile ? "on file" : "none"}</Badge>}
+      </div>
+
+      {hash === undefined ? (
+        <Skeleton className="mt-3 h-10 w-full" />
+      ) : onFile ? (
+        <>
+          <div className="mt-2">
+            <Bytes>{hash}</Bytes>
+          </div>
+          <p className="mt-3 border-t border-line pt-3 text-[0.7rem] leading-relaxed text-mut">
+            They filed it themselves, from their own key{filed ? ` — ${when(filed.at)}` : ""}. Every settlement proof about
+            their debts must name this hash.
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-[0.7rem] leading-relaxed text-mut">
+          No payout account is on file for NGN. Until they file one from their own key, Good cannot even post a claim of
+          having paid them.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -171,33 +249,31 @@ export default function WhoPage({ params }: { params: Promise<{ address: string 
 
 function Locations({ profile }: { profile: Profile }) {
   return (
-    <section className="card p-6">
-      <h2 className="mb-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">Locations they host</h2>
-      <p className="mb-4 max-w-2xl text-sm leading-relaxed text-mut">
-        A tranche record carries its landlord and its location — the creator&rsquo;s consignment said where it sits and who
-        the 5% belongs to, and the chain holds that sentence.
+    <>
+      <p className="mb-5 max-w-2xl text-sm leading-relaxed text-mut">
+        A consignment record carries its landlord and its location — the creator&rsquo;s paperwork said where the goods sit
+        and who the 5% belongs to, and the chain holds that sentence.
       </p>
-      <ul className="grid gap-3 sm:grid-cols-2">
+      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {profile.tranches.map((tranche) => (
-          <li key={String(tranche.id)} className="rounded-[var(--radius-inner)] border border-line bg-sunken/50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-ink">{tranche.location}</span>
-              <Badge tone="plain">{tranche.itemCount} items</Badge>
-            </div>
-            <div className="mt-1 text-xs text-mut">
-              consignment #{String(tranche.id)} · consigned by{" "}
-              <Link href={`/creators/${String(tranche.creatorId)}`} className="underline-offset-2 hover:underline">
-                creator #{String(tranche.creatorId)}
-              </Link>{" "}
-              · posted {when(tranche.postedAt)}
+          <li key={String(tranche.id)} className="card overflow-hidden p-0">
+            <ProductTile name={tranche.location} className="aspect-[16/9]" />
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-semibold text-ink">{tranche.location}</span>
+                <Badge tone="plain">{tranche.itemCount} items</Badge>
+              </div>
+              <div className="mt-1 text-[0.68rem] text-faint">
+                consignment #{String(tranche.id)} · consigned by{" "}
+                <Link href={`/creators/${String(tranche.creatorId)}`} className="underline-offset-2 hover:underline">
+                  creator #{String(tranche.creatorId)}
+                </Link>{" "}
+                · posted {when(tranche.postedAt)}
+              </div>
             </div>
           </li>
         ))}
       </ul>
-      <p className="mt-4 text-xs text-faint">
-        Paid the 5% on every sale at these locations. Their money and its state are in <span className="text-mut">debts</span>;
-        who they are is nothing more than <WhoLink address={profile.address} /> and what the ledger proved.
-      </p>
-    </section>
+    </>
   );
 }

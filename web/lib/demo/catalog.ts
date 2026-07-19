@@ -38,6 +38,8 @@ export type Collection = {
   name: string;
   creatorId: number;
   creatorName: string;
+  /** The line's shelf in the shop — fashion, fragrance, lifestyle… A browsing facet, not a chain fact. */
+  category: string;
   blurb: string;
   items: CatalogItem[];
 };
@@ -61,6 +63,7 @@ export const CATALOG: Collection[] = [
     name: "Àṣẹ Atelier",
     creatorId: 1,
     creatorName: "Amara Okonkwo",
+    category: "Fragrance",
     blurb: "Hand-poured incense and perfume oils, blended in Lagos and carried by hand to the counters that stock them.",
     items: [
       {
@@ -119,6 +122,7 @@ export const CATALOG: Collection[] = [
     name: "Waxwork Lagos",
     creatorId: 2,
     creatorName: "Tunde Bakare",
+    category: "Home & Lifestyle",
     blurb: "Small-batch soy candles, hand-numbered, with a burn time you can read off the base.",
     items: [
       {
@@ -165,6 +169,7 @@ export const CATALOG: Collection[] = [
     name: "Adé Leather",
     creatorId: 3,
     creatorName: "Ngozi Eze",
+    category: "Fashion",
     blurb: "Vegetable-tanned leather goods, stitched in Surulere. Made to be repaired, not replaced.",
     items: [
       {
@@ -204,6 +209,12 @@ export const byCreator = (creatorId: number): Collection[] => CATALOG.filter((c)
 
 /** The name behind a creator id, when the catalog knows it. */
 export const creatorName = (creatorId: number): string | undefined => byCreator(creatorId)[0]?.creatorName;
+
+/** The shelves a browser can filter by. The catalog's own, plus the ones the shop plans to stock. */
+export const CATEGORIES: string[] = [...new Set([...CATALOG.map((c) => c.category), "Food & Drink"])].sort();
+
+/** The shelves a creator's lines sit on. */
+export const categoriesOf = (creatorId: number): string[] => [...new Set(byCreator(creatorId).map((c) => c.category))];
 
 export const collection = (id: string): Collection | undefined => CATALOG.find((c) => c.id === id);
 
