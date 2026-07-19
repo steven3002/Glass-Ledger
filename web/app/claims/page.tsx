@@ -86,12 +86,12 @@ export default function ClaimsPage() {
           onShow={setShow}
           head={
             <>
-              <Th>Claim</Th>
-              <Th className="text-right">Amount</Th>
+              <Th secondary>Claim</Th>
+              <Th className="text-left sm:text-right">Amount</Th>
               <Th>Debts</Th>
-              <Th>Posted</Th>
-              <Th>Challenge window</Th>
-              <Th>Reference</Th>
+              <Th secondary>Posted</Th>
+              <Th secondary>Challenge window</Th>
+              <Th secondary>Reference</Th>
               <Th>Status</Th>
             </>
           }
@@ -104,10 +104,10 @@ export default function ClaimsPage() {
                 <Td label="Claim" secondary className="font-mono text-xs text-faint">
                   #{String(claim.id)}
                 </Td>
-                <Td label="Amount" headline className="text-right font-semibold tabular-nums text-ink">
+                <Td label="Amount" className="text-left font-semibold tabular-nums text-ink sm:text-right">
                   {naira(claim.totalAmount)}
                 </Td>
-                <Td label="Debts" secondary className="text-mut">
+                <Td label="Debts" className="text-mut">
                   {claim.debtIds.length} {claim.debtIds.length === 1 ? "debt" : "debts"}
                 </Td>
                 <Td label="Posted" secondary className="text-mut">
@@ -115,11 +115,11 @@ export default function ClaimsPage() {
                 </Td>
                 {/* A pending claim whose window has shut was not challenged — a challenge would have
                     moved it to "challenged". It stays pending until somebody calls settleClaim, which
-                    anyone may do: the chain does not change state just because a timestamp passed. */}
-                {/* Folded on a phone: "closed 5d 2h ago · unchallenged" measures 207px of a 308px row,
-                    which ate the line and pushed the status onto a second one — rows came out 75px and
-                    49px alternately. It is a sentence, not a value, and sentences belong under the
-                    kebab with the other things you open a row to read. */}
+                    anyone may do: the chain does not change state just because a timestamp passed.
+
+                    Dropped on a phone: "closed 5d 2h ago · unchallenged" is a sentence, not a value,
+                    and at 207px it was wider than the rest of the row put together. Sentences belong
+                    under the kebab with the other things you open a row to read. */}
                 <Td
                   label="Challenge window"
                   secondary

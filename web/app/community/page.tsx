@@ -93,12 +93,12 @@ export default function CommunityPage() {
         <TableShell
           head={
             <>
-              <Th className="w-12">#</Th>
+              <Th secondary className="w-12">#</Th>
               <Th>Referrer</Th>
-              <Th className="text-right">Referrals</Th>
+              <Th secondary className="text-right">Referrals</Th>
               <Th className="text-right">Owed now</Th>
-              <Th className="text-right">Proven paid</Th>
-              <Th className="text-right">Ever minted</Th>
+              <Th secondary className="text-right">Proven paid</Th>
+              <Th secondary className="text-right">Ever minted</Th>
               <Th>Status</Th>
             </>
           }

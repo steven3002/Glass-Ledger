@@ -230,144 +230,72 @@
  * be. Unlayered rules outrank all layered ones, which is exactly the authority this needs: it is not
  * competing with the utilities, it is replacing them for one breakpoint.
  */
-/* The toggle cell exists only for the stacked layout; a table that is still a table folds nothing. */
-.gl-td-toggle {
+/* Both exist only for the narrowed table; a table with room for all its columns folds nothing. */
+.gl-td-toggle,
+.gl-detail {
   display: none;
 }
 
 /*
- * The table, restacked for a phone.
+ * The table, narrowed for a phone — still a table.
  *
- * A seven-column ledger row does not survive a 390px screen. Trapping it in a sideways scroller
- * keeps the table honest but puts the facts that matter — the money, the state — off the edge,
- * where a reader has to swipe to find out whether a debt is in default. So below `sm` the table
- * stops being a table.
+ * A seven-column ledger row does not survive a 390px screen. The first attempt restacked each row
+ * into a flex line and captioned every cell with its column name, which put the labels back but
+ * printed them once per row: a header repeated forty times is not a header, it is noise, and the
+ * values no longer lined up down the page because every row sized its own cells.
  *
- * It does not become a stack of cards. A card per row buys nothing and costs height: ten debts
- * turn into a page you scroll for a minute, and the list stops being scannable, which was the
- * whole point of a table. The row stays a row — one compact line, the same facts in the same
- * order a desktop reader sees — and everything secondary folds behind the kebab at its end.
- *
- * Nothing is dropped. The row still carries every fact it carries on a desktop; the reader just
- * decides when to see the rest.
+ * So the table stays a table and simply shows fewer COLUMNS. One header row still names them, the
+ * values still align in columns, and the columns a phone drops are reached through the kebab, which
+ * opens a full-width detail row beneath — the thing tables have always done with detail. Nothing is
+ * hidden from the reader; the row just stops claiming the whole schema fits across 390px.
  */
 @media (width < 40rem) {
-  .gl-table,
-  .gl-table tbody,
-  .gl-table td {
-    display: block;
-    width: auto;
-  }
-
-  /* The header row is the one thing that genuinely goes: the folded cells carry their own labels,
-     and the visible ones are read the way the desktop row reads them — by what they plainly are. */
-  .gl-table thead {
-    display: none;
-  }
-
-  /* One line, wrapping only when it must. A rule under it instead of a border around it: this is a
-     list of rows, and rows are separated, not boxed. */
-  /* Top-aligned, so the captions all sit on one line and read as the header row they replace. Centred,
-     each cell floated to the middle of its own height and the labels stepped up and down the row. */
-  .gl-table .gl-tr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: start;
-    column-gap: 0.625rem;
-    border-bottom: 1px solid var(--color-line);
-    padding: 0.5rem 0;
-  }
-  .gl-table .gl-tr:last-child {
-    border-bottom: 0;
-  }
-
-  .gl-table .gl-td {
-    padding: 0.1875rem 0;
-    white-space: normal;
-    text-align: left;
-  }
-
-  /*
-   * The headline cell gives up the room, and it is the only one that can.
-   *
-   * It is the thing the row is about — the party, the item, the place — and it is also the widest.
-   * Left at its natural width it pushed the kebab onto a line of its own, so a row whose name ran long
-   * paid for it with an extra line of height and a stranded control. The money, the state and the
-   * kebab hold their size; the name absorbs whatever is left.
-   */
-  .gl-table .gl-td[data-headline] {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  /*
-   * Every visible column keeps its name.
-   *
-   * The header row is gone on a phone, and without it a bare "₦87,500 · pending" is a row of values
-   * with nothing saying what they measure — the reader has to infer the schema from the data, which
-   * is exactly the work a header does. So each visible cell wears its column above it, in the same
-   * small caps the figure strips use, and the row stays one line tall because the caption sits in
-   * space the tallest cell was already occupying.
-   *
-   * The folded cells are laid out the other way — label left, value right — because down there they
-   * are a list of pairs, not a row of columns.
-   */
-  .gl-table .gl-td:not([data-more]):not([data-omit])[data-label]::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 0.125rem;
-    font-size: 0.6rem;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    line-height: 1.1;
-    color: var(--color-faint);
-    white-space: nowrap;
-  }
-
-  /* The kebab closes the visible line and holds its right edge. It centres itself against the row
-     rather than top-aligning with the captions — it labels nothing, so it lines up with nothing. */
-  .gl-table .gl-td-toggle {
-    display: block;
-    order: 1;
-    margin-left: auto;
-    align-self: center;
-    padding: 0;
-  }
-
-  /* The folded cells: full-width lines below the row, each naming its own column, ordered after
-     the toggle so that opening a row appends to it rather than rearranging what was already read. */
-  .gl-table .gl-td[data-more] {
-    order: 2;
-    flex: 0 0 100%;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1.25rem;
-    text-align: right;
-    padding: 0.25rem 0;
-  }
-  .gl-table .gl-td[data-more]:first-of-type {
-    padding-top: 0.5rem;
-  }
-  .gl-table .gl-td[data-more][data-label]::before {
-    content: attr(data-label);
-    flex: none;
-    text-align: left;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--color-faint);
-    white-space: nowrap;
-  }
-
-  /* Folded until asked for. */
-  .gl-table .gl-tr:not([data-open]) .gl-td[data-more] {
-    display: none;
-  }
-
-  /* Carried no fact to begin with — gone, not folded. */
+  /* Whole columns go, head and body together, or the two stop agreeing about what is where. */
+  .gl-table .gl-th[data-more],
+  .gl-table .gl-td[data-more],
+  .gl-table .gl-th[data-omit],
   .gl-table .gl-td[data-omit] {
     display: none;
+  }
+
+  /* Tighter than the desktop rhythm: at this width the padding is competing with the data. */
+  .gl-table .gl-th {
+    padding-inline: 0.25rem;
+    padding-bottom: 0.625rem;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-faint);
+  }
+  .gl-table .gl-td {
+    padding-inline: 0.25rem;
+    padding-block: 0.625rem;
+  }
+
+  /*
+   * The headline column takes the slack and wraps rather than widening the table.
+   *
+   * The table is `whitespace-nowrap` so the value columns stay on one line each; that is right for a
+   * sum or a status and wrong for a name, which is the one thing here long enough to push the table
+   * past the screen. Wrapping beats truncating: a name cut to "The Communi…" has lost the fact,
+   * whereas a name on two lines has only cost a few pixels of height.
+   */
+  .gl-table .gl-td[data-headline] {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .gl-table .gl-td-toggle {
+    display: table-cell;
+    width: 2rem;
+    padding: 0;
+    vertical-align: middle;
+  }
+
+  /* The drawer under an opened row: the dropped columns, each named, since no header stands over them. */
+  .gl-detail {
+    display: table-row;
   }
 
   /*
@@ -375,10 +303,10 @@
    *
    * The landing page's panels are previews with a link onward, and a preview twelve rows deep is not a
    * preview on a phone — it is the page, scrolled past. Three is enough to show what kind of thing the
-   * list holds; the "View all …" underneath is the actual answer to wanting more.
+   * list holds; the "View all ..." underneath is the actual answer to wanting more.
    *
    * Only ever put this on a list that carries that link, and never on one a pager is counting: a cap
-   * under a pager reading "1–12 of 152" is the page contradicting itself.
+   * under a pager reading "1-12 of 152" is the page contradicting itself.
    */
   .gl-cap-3 > *:nth-child(n + 4) {
     display: none;

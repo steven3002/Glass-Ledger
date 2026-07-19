@@ -121,10 +121,10 @@ function LandlordsTable({ rows }: { rows: Profile[] }) {
       head={
         <>
           <Th>Location</Th>
-          <Th>Address</Th>
-          <Th className="text-right">Ever owed</Th>
+          <Th secondary>Address</Th>
+          <Th secondary className="text-right">Ever owed</Th>
           <Th className="text-right">Owed now</Th>
-          <Th className="text-right">Proven paid</Th>
+          <Th secondary className="text-right">Proven paid</Th>
           <Th>Status</Th>
         </>
       }

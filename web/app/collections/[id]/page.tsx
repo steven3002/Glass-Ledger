@@ -57,7 +57,7 @@ export default function CollectionPage({ params }: { params: Promise<{ id: strin
   return (
     <main className="mx-auto max-w-[1200px] px-6 pt-8 pb-14 sm:px-10 lg:px-12">
       {/* Header: what the line is, who made it, and its picture. */}
-      <div className="flex flex-wrap items-start justify-between gap-8">
+      <div className="flex flex-col-reverse gap-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-8">
         <div className="min-w-0 flex-1">
           <nav className="text-xs font-medium tracking-wide text-faint">
             <Link href="/collections" className="transition-colors hover:text-ink">

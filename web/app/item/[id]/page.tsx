@@ -119,7 +119,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
     <main className="mx-auto max-w-[1200px] space-y-5 p-6 lg:p-8">
       <Masthead itemId={itemId} item={item} tag={tag} consignment={consignment} tranche={tranche} />
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 [&>*]:min-w-0 lg:grid-cols-2">
         <div className="space-y-5">
           {item && tranche ? (
             <ChainFacts itemId={itemId} item={item} extras={extras} now={now} />
@@ -172,7 +172,7 @@ function Masthead({
 }) {
   return (
     <section className="card p-6" style={{ boxShadow: "var(--shadow-pop)" }}>
-      <div className="flex flex-wrap items-start gap-6">
+      <div className="flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-6">
         <DressImage
           id={Number(itemId)}
           label={item?.name ?? `Item ${String(itemId)}`}

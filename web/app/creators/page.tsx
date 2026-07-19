@@ -115,9 +115,9 @@ function CreatorsTable({ rows, holdings }: { rows: Cage["capacity"]; holdings?: 
       head={
         <>
           <Th>Creator</Th>
-          <Th>Signs as</Th>
-          <Th className="text-right">Collections</Th>
-          <Th className="text-right">Sales</Th>
+          <Th secondary>Signs as</Th>
+          <Th secondary className="text-right">Collections</Th>
+          <Th secondary className="text-right">Sales</Th>
           <Th className="text-right">Owed now</Th>
           <Th className="text-right">Headroom</Th>
           <Th>Till</Th>

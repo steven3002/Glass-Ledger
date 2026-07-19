@@ -96,7 +96,7 @@ export default function HistoryPage() {
           head={
             <>
               <Th className="w-44">When</Th>
-              <Th className="w-8" />
+              <Th omit className="w-8" />
               <Th>What happened</Th>
             </>
           }

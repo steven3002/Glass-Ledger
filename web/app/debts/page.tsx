@@ -118,12 +118,12 @@ export default function DebtsPage() {
           onShow={setShow}
           head={
             <>
-              <Th>Debt</Th>
+              <Th secondary>Debt</Th>
               <Th>Owed to</Th>
-              <Th>Item</Th>
-              <Th>Rail</Th>
+              <Th secondary>Item</Th>
+              <Th secondary>Rail</Th>
               <Th className="text-right">Amount</Th>
-              <Th>Age</Th>
+              <Th secondary>Age</Th>
               <Th>Status</Th>
             </>
           }

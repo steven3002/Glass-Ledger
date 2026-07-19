@@ -51,7 +51,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
   return (
     <main className="mx-auto max-w-[1200px] px-6 pt-8 pb-14 sm:px-10 lg:px-12">
       {/* Header: what it is, whose line it belongs to, and its picture. */}
-      <div className="flex flex-wrap items-start justify-between gap-8">
+      <div className="flex flex-col-reverse gap-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-8">
         <div className="min-w-0 flex-1">
           <nav className="text-xs font-medium tracking-wide text-faint">
             <Link href="/collections" className="transition-colors hover:text-ink">
@@ -91,14 +91,17 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
         <ProductTile name={item.name} className="size-40 shrink-0 rounded-xl border border-line" />
       </div>
 
-      <div className="mt-10 grid gap-5 lg:grid-cols-[1fr_1fr]">
+      <div className="mt-10 grid gap-5 [&>*]:min-w-0 lg:grid-cols-[1fr_1fr]">
         {/* Where it stands, place by place — the same item at different prices. */}
         <Panel
           title="Where it stands"
           hint="The same item, priced per location. Price is the kind of thing the chain proves per unit; the stock count is the indexer's."
         >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[26rem] text-sm">
+            {/* The floor only applies where there is room to spare. Four short columns — a place, a
+                price and two counts — fit a phone unaided; forcing 26rem there put the stock and sold
+                counts behind a sideways swipe for no reason. */}
+            <table className="w-full text-sm sm:min-w-[26rem]">
               <thead>
                 <tr className="border-b border-line text-left text-[0.62rem] uppercase tracking-[0.12em] text-faint">
                   <th className="py-2.5 pr-2 font-semibold">Location</th>

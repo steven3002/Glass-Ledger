@@ -6,7 +6,7 @@
  * walked a page at a time, and the numbers say exactly where you stand in it.
  */
 
-import { useState, type ReactNode } from "react";
+import { Children, isValidElement, useState, type ReactElement, type ReactNode } from "react";
 
 import { DotsIcon } from "./icons";
 import { Dropdown } from "./dropdown";
@@ -78,9 +78,44 @@ function Table({ head, children }: { head: ReactNode; children: ReactNode }) {
   );
 }
 
-export function Th({ children, className = "" }: { children?: ReactNode; className?: string }) {
-  return <th className={`px-2 pb-4 font-semibold ${className}`}>{children}</th>;
+/**
+ * A column heading.
+ *
+ * `secondary` and `omit` must match the `Td`s underneath: a phone drops whole COLUMNS, header and
+ * body together, so the two have to agree about which ones. They are stated twice — once here, once
+ * on the cell — which is the price of a `<table>` keeping its head and body in separate elements.
+ */
+export function Th({
+  children,
+  className = "",
+  secondary = false,
+  omit = false,
+}: {
+  children?: ReactNode;
+  className?: string;
+  secondary?: boolean;
+  omit?: boolean;
+}) {
+  return (
+    <th
+      className={`gl-th px-2 pb-4 font-semibold ${className}`}
+      data-more={secondary ? "" : undefined}
+      data-omit={omit ? "" : undefined}
+    >
+      {children}
+    </th>
+  );
 }
+
+type TdProps = {
+  children?: ReactNode;
+  className?: string;
+  title?: string;
+  label?: string;
+  secondary?: boolean;
+  omit?: boolean;
+  headline?: boolean;
+};
 
 export function Td({
   children,
@@ -96,8 +131,9 @@ export function Td({
   /** The long form of a terse cell — the sentence behind a word like "unchallenged". */
   title?: string;
   /**
-   * What this column is called. On a phone the header row is gone, so each cell has to name itself;
-   * without a label a stacked cell is a value with nothing saying what it measures.
+   * What this column is called. Not printed beside the value — the header row prints it, once, the
+   * way a table always has. It is used for the folded fields under an opened row, where there is no
+   * column above them to do the naming.
    */
   label?: string;
   /**
@@ -121,9 +157,8 @@ export function Td({
   /**
    * The cell the row is *about* — the party, the item, the place.
    *
-   * On a phone it is the one that gives up room: it is always the widest, and at its natural width it
-   * pushes the kebab onto a line of its own. Stated rather than inferred from "the cell with no
-   * label", because on a phone every column wants a label, including this one.
+   * On a phone its column takes the slack and wraps, so the values beside it (a sum, a status) keep
+   * their one line and the table still fits the screen. Exactly one per row.
    */
   headline?: boolean;
 }) {
@@ -142,39 +177,63 @@ export function Td({
 }
 
 /**
- * A row, and on a phone the card it becomes.
+ * A row — and, on a phone, the shorter row plus the drawer underneath it.
  *
- * `more` says the row has cells worth folding: it gets a toggle of its own, and the stacked layout
- * hides its `secondary` cells until that toggle is pressed. A row with nothing folded never grows a
- * control that would open nothing.
+ * `more` says the row has cells worth folding. On a phone the table stays a table: it simply shows
+ * fewer COLUMNS, so one header row still names them all and the values still line up down the page.
+ * The folded fields cannot live in that row — a cell more than the header has would break the very
+ * alignment we are protecting — so they go in a second row spanning the full width, which is what a
+ * table has always done with detail.
  */
 export function Tr({ children, more = false }: { children: ReactNode; more?: boolean }) {
   const [open, setOpen] = useState(false);
 
+  const cells = Children.toArray(children).filter(isValidElement) as ReactElement<TdProps>[];
+  const folded = cells.filter((c) => c.props.secondary);
+  // What the detail row has to span: the columns a phone still shows, plus the kebab's own.
+  const across = cells.filter((c) => !c.props.secondary && !c.props.omit).length + (more ? 1 : 0);
+
   return (
-    <tr
-      className="gl-tr transition-colors hover:bg-sunken/50"
-      data-more={more ? "" : undefined}
-      data-open={more && open ? "" : undefined}
-    >
-      {children}
-      {more && (
-        /* The phone's control only — a wider screen folds nothing, so the cell collapses to nothing. */
-        <td className="gl-td-toggle">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            aria-label={open ? "Hide the rest of this row" : "Show the rest of this row"}
-            className={`grid size-8 place-items-center rounded-lg transition-colors ${
-              open ? "bg-sunken text-ink" : "text-faint hover:bg-sunken hover:text-ink"
-            }`}
-          >
-            <DotsIcon className="size-4" />
-          </button>
-        </td>
+    <>
+      <tr
+        className="gl-tr transition-colors hover:bg-sunken/50"
+        data-more={more ? "" : undefined}
+        data-open={more && open ? "" : undefined}
+      >
+        {children}
+        {more && (
+          /* The phone's control only — a wider screen folds nothing, so the cell collapses to nothing. */
+          <td className="gl-td-toggle">
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-label={open ? "Hide the rest of this row" : "Show the rest of this row"}
+              className={`grid size-8 place-items-center rounded-lg transition-colors ${
+                open ? "bg-sunken text-ink" : "text-faint hover:bg-sunken hover:text-ink"
+              }`}
+            >
+              <DotsIcon className="size-4" />
+            </button>
+          </td>
+        )}
+      </tr>
+
+      {more && open && folded.length > 0 && (
+        <tr className="gl-detail">
+          <td colSpan={across} className="px-2 pb-4">
+            <dl className="grid gap-x-5 gap-y-1.5 rounded-lg bg-sunken/60 px-3 py-2.5 text-[13px]">
+              {folded.map((cell, i) => (
+                <div key={i} className="flex items-baseline justify-between gap-4">
+                  <dt className="shrink-0 text-faint">{cell.props.label}</dt>
+                  <dd className="min-w-0 text-right whitespace-normal">{cell.props.children}</dd>
+                </div>
+              ))}
+            </dl>
+          </td>
+        </tr>
       )}
-    </tr>
+    </>
   );
 }
 

@@ -87,9 +87,9 @@ export default function ShelfPage() {
           head={
             <>
               <Th>Item</Th>
-              <Th>Id</Th>
+              <Th secondary>Id</Th>
               <Th className="text-right">Price</Th>
-              <Th>Held by</Th>
+              <Th secondary>Held by</Th>
               <Th>Status</Th>
             </>
           }
