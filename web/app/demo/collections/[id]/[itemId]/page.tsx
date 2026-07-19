@@ -35,7 +35,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
         <Panel title="No such item" tone="alarm">
           <p className="text-sm leading-relaxed text-ink-2">
             The catalog has no item &ldquo;{itemId}&rdquo; in that collection. Back to{" "}
-            <Link href={`/collections/${id}`} className="underline">
+            <Link href={`/demo/collections/${id}`} className="underline">
               the collection
             </Link>
             .
@@ -54,11 +54,11 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
       <div className="flex flex-col-reverse gap-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-8">
         <div className="min-w-0 flex-1">
           <nav className="text-xs font-medium tracking-wide text-faint">
-            <Link href="/collections" className="transition-colors hover:text-ink">
+            <Link href="/demo/collections" className="transition-colors hover:text-ink">
               Collections
             </Link>
             <span className="mx-1.5">•</span>
-            <Link href={`/collections/${collection.id}`} className="transition-colors hover:text-ink">
+            <Link href={`/demo/collections/${collection.id}`} className="transition-colors hover:text-ink">
               {collection.name}
             </Link>
             <span className="mx-1.5">•</span>
@@ -70,7 +70,7 @@ export default function ItemPage({ params }: { params: Promise<{ id: string; ite
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-mut">
             in{" "}
-            <Link href={`/collections/${collection.id}`} className="font-medium text-ink-2 underline-offset-2 hover:underline">
+            <Link href={`/demo/collections/${collection.id}`} className="font-medium text-ink-2 underline-offset-2 hover:underline">
               {collection.name}
             </Link>{" "}
             · by{" "}

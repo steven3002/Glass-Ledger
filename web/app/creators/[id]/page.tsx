@@ -194,7 +194,7 @@ function CreatorCollections({ collections }: { collections: Collection[] }) {
         const totals = collectionTotals(c);
         return (
           <li key={c.id}>
-            <Link href={`/collections/${c.id}`} className="card-tap group block overflow-hidden p-0">
+            <Link href={`/demo/collections/${c.id}`} className="card-tap group block overflow-hidden p-0">
               <ProductTile name={c.name} className="aspect-[16/9]" />
               <div className="p-4">
                 <div className="flex items-center justify-between gap-2">

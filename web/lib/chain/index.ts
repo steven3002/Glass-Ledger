@@ -96,3 +96,15 @@ export function deployment(): Promise<Deployment> {
 
 /** The currency this deployment's prices and debts are denominated in: "NGN", right-padded to 32 bytes. */
 export const NGN = "0x4e474e0000000000000000000000000000000000000000000000000000000000" as const;
+
+/**
+ * The public explorer for this chain, where there is one.
+ *
+ * Undefined on a local development chain, and the pages must honour that rather than print a dead
+ * link: "check it yourself" is only worth offering when there is somewhere to check. Verified against
+ * 0G's explorer, including that an unknown hash renders "the transaction can not be found" instead of
+ * an empty page that looks like a real one.
+ */
+export const EXPLORER: string | undefined = CHAIN_ID === 16602 ? "https://chainscan-galileo.0g.ai" : undefined;
+
+export const explorerTx = (hash: string): string | undefined => (EXPLORER ? `${EXPLORER}/tx/${hash}` : undefined);

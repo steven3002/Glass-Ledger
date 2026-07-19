@@ -95,9 +95,15 @@ export default function ShelfPage() {
           }
         >
           {paged.slice.map((item) => (
-            <Tr key={String(item.id)} more>
+            <Tr key={String(item.id)} more href={`/item/${String(item.id)}`}>
               <Td label="Item" headline>
-                <Link href={`/item/${String(item.id)}`} className="font-medium text-ink transition-colors hover:underline">
+                {/* The row navigates, but the name stays a real link: it is what a keyboard tabs to
+                    and what a screen reader announces, and it is the only affordance on a phone,
+                    where there is no hover to reveal that the row is clickable at all. */}
+                <Link
+                  href={`/item/${String(item.id)}`}
+                  className="font-medium text-ink underline decoration-line-strong underline-offset-2 transition-colors hover:decoration-ink"
+                >
                   {item.name}
                 </Link>
               </Td>

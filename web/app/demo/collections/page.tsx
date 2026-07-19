@@ -100,7 +100,7 @@ function CollectionCard({ c, view }: { c: Collection; view: View }) {
   return (
     <li>
       <Link
-        href={`/collections/${c.id}`}
+        href={`/demo/collections/${c.id}`}
         className={`card group flex gap-5 overflow-hidden p-2.5 transition-transform duration-300 hover:-translate-y-1 ${
           compact ? "h-[210px]" : "h-[248px]"
         }`}

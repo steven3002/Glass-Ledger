@@ -21,10 +21,11 @@ const TITLES: Record<string, { title: string; sub: string }> = {
   "/debts": { title: "The ledger / Debts", sub: "Who is owed, and for how long" },
   "/shelf": { title: "The ledger / The shelf", sub: "Every item, and where it stands" },
   "/claims": { title: "The ledger / Claims", sub: "What Good says it has paid" },
+  "/commons": { title: "The ledger / The commons", sub: "The fund that pays when Good does not" },
   "/history": { title: "The ledger / What happened", sub: "Every state change, newest first" },
   "/creator": { title: "The goods / Inspect", sub: "Scan a tag — authenticity, state, and where the money went" },
   "/creator/understand": { title: "The goods / Inspect · How it works", sub: "The wall we scan in the demo" },
-  "/collections": { title: "The goods / Collections", sub: "Every creator's line" },
+  "/demo/collections": { title: "The goods / Collections", sub: "Every creator's line" },
   "/map": { title: "The goods / The map", sub: "Everywhere Good stands, on the globe" },
   "/creators": { title: "The people / Creators", sub: "The registry's whole population" },
   "/landlords": { title: "The people / Landlords", sub: "Named by tranches, paid by legs" },
@@ -38,12 +39,22 @@ function titleFor(pathname: string): { title: string; sub: string } {
     return { title: `The goods / Item ${pathname.slice("/item/".length)}`, sub: "One item, its whole life" };
   if (pathname.startsWith("/creators/"))
     return { title: `The people / Creator #${pathname.slice("/creators/".length)}`, sub: "A key, and what grew around it" };
-  if (pathname.startsWith("/collections/")) {
-    const rest = pathname.slice("/collections/".length);
+  if (pathname.startsWith("/demo/collections/")) {
+    const rest = pathname.slice("/demo/collections/".length);
     return rest.includes("/")
       ? { title: "The goods / Item", sub: "Where it stands, and for how much" }
       : { title: "The goods / Collection", sub: "Its items, across locations" };
   }
+  if (pathname.startsWith("/debts/"))
+    return {
+      title: `The ledger / Debt #${pathname.slice("/debts/".length)}`,
+      sub: "One leg of a sale, and what became of it",
+    };
+  if (pathname.startsWith("/claims/"))
+    return {
+      title: `The ledger / Claim #${pathname.slice("/claims/".length)}`,
+      sub: "What Good asserted, and what became of it",
+    };
   if (pathname.startsWith("/who/")) return { title: "The people / Profile", sub: "Derived, never registered" };
   return { title: "Glass Ledger", sub: "Trustless retail" };
 }
@@ -82,7 +93,9 @@ function destination(query: string): string {
   if (/^(buy|counter|scan)/i.test(q)) return "/creator";
   if (/^(inspect|verify|tags?|authenticate|scan)/i.test(q)) return "/creator";
 
-  return "/collections";
+  // Nothing matched. The gallery is the demo shop's — it is the only surface that browses by picture
+  // rather than by id, which is exactly what a reader who typed a word instead of a number wants.
+  return "/demo/collections";
 }
 
 export function Topbar() {

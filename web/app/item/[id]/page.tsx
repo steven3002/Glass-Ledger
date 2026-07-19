@@ -18,21 +18,15 @@ import { use, useEffect, useState } from "react";
 import { FiguresRow, PageFigure } from "@/components/browse";
 import { DressImage } from "@/components/dress-image";
 import { Fact, Facts, ItemMoney, Paperwork, WhoLink } from "@/components/entity";
-import {
-  CardSkeleton,
-  ChainError,
-  itemTone,
-  shelfWord,
-  Timeline,
-  useLedger,
-} from "@/components/ledger-view";
+import { Lifecycle } from "@/components/lifecycle";
+import { CardSkeleton, ChainError, itemTone, shelfWord, useLedger } from "@/components/ledger-view";
 import { Badge, Bytes, Panel, Skeleton } from "@/components/ui";
 import { abi, deployment, publicClient } from "@/lib/chain";
 import { naira, shortHash, untilDeadline, when } from "@/lib/format";
 import type { Holdings } from "@/lib/ledger";
 import { claimsTouching, linesAbout } from "@/lib/ledger/profiles";
+import { collectionForItem, indexedItem, loadIndex, type CatalogIndex } from "@/lib/index";
 import { genuineTags, loadConsignment, rootOf, type Consignment, type WallTag } from "@/lib/tags";
-import { TagQR } from "@/lib/qr";
 import { verifyMembership } from "@/lib/verify";
 
 /** The chain's answers that live outside the ledger read: the certificate and the price schedule. */
@@ -47,10 +41,12 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
 
   const { cage, holdings, history, problem, now } = useLedger();
   const [consignment, setConsignment] = useState<Consignment>();
+  const [index, setIndex] = useState<CatalogIndex>();
   const [extras, setExtras] = useState<Extras>({});
 
   useEffect(() => {
     void loadConsignment().then(setConsignment).catch(() => setConsignment(undefined));
+    void loadIndex().then(setIndex).catch(() => setIndex(undefined));
   }, []);
 
   const item = holdings?.items.find((i) => i.id === itemId);
@@ -115,14 +111,34 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
     ? linesAbout(history.entries, { itemIds: new Set([itemId]), debtIds, claimIds: new Set(claims.map((c) => c.id)) })
     : [];
 
+  // Who collected each default. The log names the collector, and naming them is the point: the
+  // protocol's claim is that a stranger with nothing at stake will take the money, so the page has to
+  // be able to show that it was not the person who was owed.
+  const coveredBy = new Map<string, string>();
+  for (const entry of history?.entries ?? []) {
+    if (entry.name === "DefaultCovered" && entry.debtId !== undefined && entry.who) {
+      coveredBy.set(String(entry.debtId), entry.who);
+    }
+  }
+
+  const redeemed = (history?.entries ?? []).some((e) => e.name === "CertificateRedeemed" && e.itemId === itemId);
+
   return (
     <main className="mx-auto max-w-[1200px] space-y-5 p-6 lg:p-8">
-      <Masthead itemId={itemId} item={item} tag={tag} consignment={consignment} tranche={tranche} />
+      <Masthead
+        itemId={itemId}
+        item={item}
+        tag={tag}
+        consignment={consignment}
+        tranche={tranche}
+        collection={index ? collectionForItem(index, itemId) : undefined}
+        indexed={index ? indexedItem(index, itemId) : undefined}
+      />
 
       <div className="grid gap-5 [&>*]:min-w-0 lg:grid-cols-2">
         <div className="space-y-5">
           {item && tranche ? (
-            <ChainFacts itemId={itemId} item={item} extras={extras} now={now} />
+            <ChainFacts itemId={itemId} item={item} extras={extras} now={now} redeemed={redeemed} />
           ) : (
             <CardSkeleton rows={5} title />
           )}
@@ -134,13 +150,20 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
         </div>
 
         <div className="space-y-5">
-          {holdings ? <ItemMoney debts={debts} claims={claims} now={now} /> : <CardSkeleton rows={4} tall />}
+          {holdings ? (
+            <ItemMoney debts={debts} claims={claims} now={now} price={item?.price} coveredBy={coveredBy} />
+          ) : (
+            <CardSkeleton rows={4} tall />
+          )}
           <Panel
             title="The life"
-            hint="Every line of the public record that is this item's business — the same sentences the history page holds, none written for this page."
+            hint="Oldest first, grouped by the transaction each act happened in — the same sentences the history page holds, none written for this page. Every moment carries its hash out to a public explorer."
           >
             {history ? (
-              <Timeline entries={lines} empty="Nothing has happened to this item yet. It is paperwork and a price, waiting." />
+              <Lifecycle
+                entries={lines}
+                empty="Nothing has happened to this item yet. It is paperwork and a price, waiting."
+              />
             ) : (
               <div className="space-y-2.5">
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -163,12 +186,18 @@ function Masthead({
   tag,
   consignment,
   tranche,
+  collection,
+  indexed,
 }: {
   itemId: bigint;
   item?: Holdings["items"][number];
   tag?: WallTag;
   consignment?: Consignment;
   tranche?: Holdings["tranches"][number];
+  /** The line this unit belongs to, per the index. The chain has no idea; grouping is editorial. */
+  collection?: { id: string; name: string };
+  /** What the shop calls this exact unit — a name and a variant the contract never stored. */
+  indexed?: { name: string; variant: string };
 }) {
   return (
     <section className="card p-6" style={{ boxShadow: "var(--shadow-pop)" }}>
@@ -190,10 +219,27 @@ function Masthead({
             )}
           </div>
           {item ? (
-            <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight">
-              {item.name}
-              <Badge tone={itemTone(item.state)}>{shelfWord(item.state)}</Badge>
-            </h1>
+            <>
+              <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight">
+                {indexed?.name ?? item.name}
+                <Badge tone={itemTone(item.state)}>{shelfWord(item.state)}</Badge>
+              </h1>
+              {/* The identity the chain does not carry. A unit's name, its variant and the line it
+                  belongs to are indexed metadata — the contract knows only that item 1001 exists —
+                  so they are stated here and never confused with the facts below them. */}
+              {(indexed || collection) && (
+                <p className="mt-1.5 text-sm text-mut">
+                  {indexed && <span>{indexed.variant}</span>}
+                  {indexed && collection && " · "}
+                  {collection && (
+                    <span>
+                      in <span className="font-medium text-ink-2">{collection.name}</span>
+                    </span>
+                  )}
+                  <span className="ml-2 text-[0.7rem] text-faint">indexed, not on chain</span>
+                </p>
+              )}
+            </>
           ) : (
             <Skeleton className="mt-2 h-8 w-40" />
           )}
@@ -216,14 +262,6 @@ function Masthead({
           </FiguresRow>
         </div>
 
-        {tag && (
-          <div className="shrink-0 text-center">
-            <span className="inline-block rounded-xl bg-white p-2 shadow-md ring-1 ring-line/70">
-              <TagQR value={tag.payload} size={96} />
-            </span>
-            <div className="mt-1.5 text-[0.62rem] uppercase tracking-wider text-faint">the tag, as printed</div>
-          </div>
-        )}
       </div>
     </section>
   );
@@ -236,11 +274,14 @@ function ChainFacts({
   item,
   extras,
   now,
+  redeemed,
 }: {
   itemId: bigint;
   item: Holdings["items"][number];
   extras: Extras;
   now: number;
+  /** Whether the log shows the buyer actually used the code on her receipt. */
+  redeemed: boolean;
 }) {
   const committed = item.state === "COMMITTED";
   const clock = committed ? untilDeadline(item.committedUntil, now) : undefined;
@@ -296,7 +337,12 @@ function ChainFacts({
           {extras.certificate ? (
             <span className="text-mut">
               committed on-chain · claim code hash <Bytes>{shortHash(extras.certificate.claimCodeHash)}</Bytes> — the code
-              itself left on the buyer&rsquo;s receipt, and only its holder can redeem
+              itself left on the buyer&rsquo;s receipt, and only its holder can redeem.{" "}
+              {redeemed ? (
+                <span className="font-medium text-good">Redeemed: the holder proved she had the code.</span>
+              ) : (
+                <span className="text-faint">Not redeemed yet.</span>
+              )}
             </span>
           ) : (
             <span className="text-mut">none — no sale has issued one</span>

@@ -6,6 +6,7 @@
  * walked a page at a time, and the numbers say exactly where you stand in it.
  */
 
+import { useRouter } from "next/navigation";
 import { Children, isValidElement, useState, type ReactElement, type ReactNode } from "react";
 
 import { DotsIcon } from "./icons";
@@ -185,8 +186,9 @@ export function Td({
  * alignment we are protecting — so they go in a second row spanning the full width, which is what a
  * table has always done with detail.
  */
-export function Tr({ children, more = false }: { children: ReactNode; more?: boolean }) {
+export function Tr({ children, more = false, href }: { children: ReactNode; more?: boolean; href?: string }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   const cells = Children.toArray(children).filter(isValidElement) as ReactElement<TdProps>[];
   const folded = cells.filter((c) => c.props.secondary);
@@ -196,9 +198,25 @@ export function Tr({ children, more = false }: { children: ReactNode; more?: boo
   return (
     <>
       <tr
-        className="gl-tr transition-colors hover:bg-sunken/50"
+        className={`gl-tr transition-colors hover:bg-sunken/50 ${href ? "cursor-pointer" : ""}`}
         data-more={more ? "" : undefined}
         data-open={more && open ? "" : undefined}
+        /* The whole row is the door, not just the word in the first cell.
+         *
+         * A table row cannot be an anchor — HTML will not nest one inside <tr> — so the row
+         * navigates programmatically, and the cell that names the row keeps a real <a> so the
+         * keyboard and a screen reader still meet a link rather than a mystery. Clicks that landed
+         * on something else interactive (the other links in the row, the kebab) are left alone:
+         * `closest` finds them and this handler stands down, which is the difference between a
+         * helpful row and a row that eats every click in it. */
+        onClick={
+          href
+            ? (e) => {
+                if ((e.target as HTMLElement).closest("a, button")) return;
+                router.push(href);
+              }
+            : undefined
+        }
       >
         {children}
         {more && (
@@ -206,7 +224,10 @@ export function Tr({ children, more = false }: { children: ReactNode; more?: boo
           <td className="gl-td-toggle">
             <button
               type="button"
-              onClick={() => setOpen((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
               aria-expanded={open}
               aria-label={open ? "Hide the rest of this row" : "Show the rest of this row"}
               className={`grid size-8 place-items-center rounded-lg transition-colors ${

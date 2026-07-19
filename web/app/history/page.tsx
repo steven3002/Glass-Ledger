@@ -6,6 +6,7 @@
  * no event is an incomplete one.
  */
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { FiguresRow, FilterRow, PageFigure } from "@/components/browse";
@@ -13,7 +14,9 @@ import { Dropdown } from "@/components/dropdown";
 import { CardSkeleton, ChainError, useLedger } from "@/components/ledger-view";
 import { usePaged } from "@/components/paged";
 import { TableCard, Td, Th, Tr } from "@/components/table";
-import { ROLES, when, type Role } from "@/lib/format";
+import { explorerTx } from "@/lib/chain";
+import { ROLES, shortAddress, when, type Role } from "@/lib/format";
+import type { Entry } from "@/lib/ledger";
 
 const DOT: Record<string, string> = {
   alarm: "var(--color-bad-fill)",
@@ -30,6 +33,44 @@ const WORDS: Record<string, string> = {
   quiet: "text-faint",
   plain: "text-ink-2",
 };
+
+/**
+ * What a line is about, as doors.
+ *
+ * Built from the ids the entry already carries — never by reading the sentence. The narration spells
+ * "debt #27" out in prose because a person has to be able to read it, but parsing that back out would
+ * be inventing structure from a string that exists to be human, and it would break the first time
+ * somebody rewords a sentence.
+ *
+ * Some lines have no subject at all: money into the pool, a fine paid, a freeze lifted. Those are the
+ * operator's own conduct rather than any sale's business, and they get no chips — which is itself
+ * informative, because it is exactly the set of things that hangs off nothing.
+ */
+function Subjects({ entry }: { entry: Entry }) {
+  const chips: { href: string; label: string }[] = [];
+  if (entry.itemId !== undefined) chips.push({ href: `/item/${String(entry.itemId)}`, label: `item ${String(entry.itemId)}` });
+  if (entry.debtId !== undefined) chips.push({ href: `/debts/${String(entry.debtId)}`, label: `debt #${String(entry.debtId)}` });
+  if (entry.claimId !== undefined) chips.push({ href: `/claims/${String(entry.claimId)}`, label: `claim #${String(entry.claimId)}` });
+  if (entry.creatorId !== undefined)
+    chips.push({ href: `/creators/${String(entry.creatorId)}`, label: `creator #${String(entry.creatorId)}` });
+  if (entry.who) chips.push({ href: `/who/${entry.who}`, label: shortAddress(entry.who) });
+
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {chips.map((chip) => (
+        <Link
+          key={chip.href}
+          href={chip.href}
+          className="rounded-md border border-line bg-sunken px-1.5 py-0.5 font-mono text-[0.66rem] text-mut transition-colors hover:border-line-strong hover:text-ink"
+        >
+          {chip.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 export default function HistoryPage() {
   const { cage, holdings, history, problem } = useLedger();
@@ -107,12 +148,26 @@ export default function HistoryPage() {
             <Tr key={entry.key}>
               <Td label="When" className="align-top font-mono text-xs tabular-nums text-faint">
                 {when(entry.at)}
+                {/* The line's own transaction. A ledger that asks to be trusted has failed already —
+                    this is how a reader checks the sentence beside it against the chain itself. */}
+                {explorerTx(entry.tx) && (
+                  <a
+                    href={explorerTx(entry.tx)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open this transaction on 0G's public explorer"
+                    className="mt-0.5 block underline decoration-line-strong underline-offset-2 transition-colors hover:text-ink"
+                  >
+                    {entry.tx.slice(0, 10)}…
+                  </a>
+                )}
               </Td>
               <Td omit className="align-top">
                 <span className="mt-1.5 block size-2 rounded-full" style={{ background: DOT[entry.tone] }} aria-hidden />
               </Td>
               <Td headline className="whitespace-normal">
                 <p className={`max-w-4xl text-sm leading-relaxed ${WORDS[entry.tone]}`}>{entry.sentence}</p>
+                <Subjects entry={entry} />
               </Td>
             </Tr>
           ))}

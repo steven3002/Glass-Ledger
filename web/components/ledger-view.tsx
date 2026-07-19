@@ -29,6 +29,7 @@ import {
   type Role,
 } from "@/lib/format";
 import { readCage, readHistory, readHoldings, type Cage, type History, type Holdings } from "@/lib/ledger";
+import { markArrived, markStalled } from "@/lib/progress";
 import { loadConsignment } from "@/lib/tags";
 
 export const pct = (part: bigint, whole: bigint): number => (whole > 0n ? Number((part * 10000n) / whole) / 100 : 0);
@@ -49,10 +50,20 @@ export function useLedger(): Ledger {
       const freshCage = await readCage(where);
       setCage(freshCage);
       setProblem(undefined);
-      void readHoldings(where, consignment).then(setHoldings);
-      void readHistory(where).then(setHistory);
+      markArrived("cage");
+      // Each stage tells the progress bar the moment it lands, so what the bar shows is the read's
+      // own shape rather than a timer pretending to know how long a log scan takes.
+      void readHoldings(where, consignment).then((h) => {
+        setHoldings(h);
+        markArrived("holdings");
+      });
+      void readHistory(where).then((h) => {
+        setHistory(h);
+        markArrived("history");
+      });
     } catch (error) {
       setProblem(error instanceof Error ? error.message : String(error));
+      markStalled();
     }
   }, []);
 

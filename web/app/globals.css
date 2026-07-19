@@ -312,3 +312,32 @@
     display: none;
   }
 }
+
+/* The loading bar's leading edge.
+ *
+ * Unlayered, like the stacked-table rules above it, so a utility class cannot quietly win over it.
+ *
+ * The pulse says "still working" without claiming to have moved: the bar's WIDTH only ever changes
+ * when a stage of the read actually lands, and between stages there can be four seconds of honest
+ * silence that would otherwise read as a hang. Motion that means "alive" is fair; motion that means
+ * "progressing" when nothing has progressed is the kind of small lie this product does not tell. */
+@keyframes gl-bar-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.gl-bar-tip {
+  animation: gl-bar-pulse 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-bar-tip {
+    animation: none;
+    opacity: 0.8;
+  }
+}

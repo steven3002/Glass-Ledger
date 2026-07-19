@@ -35,7 +35,7 @@ export default function Overview() {
   }
 
   const tiles: { href: string; name: string; value?: string; note: string }[] = [
-    { href: "/collections", name: "Collections", value: holdings && String(holdings.tranches.length), note: "consignments on chain" },
+    { href: "/demo/collections", name: "Collections", value: holdings && String(holdings.tranches.length), note: "consignments on chain" },
     { href: "/creators", name: "Creators", value: cage && String(cage.capacity.length), note: "registered keys" },
     { href: "/landlords", name: "Landlords", value: holdings && String(profilesOf(holdings, "landlord").length), note: "spaces hosting goods" },
     { href: "/community", name: "Community", value: holdings && String(profilesOf(holdings, "community").length), note: "referrers paid" },
@@ -179,7 +179,7 @@ function Trending({ holdings }: { holdings?: Holdings }) {
             {rows.map(({ t, sales }, i) => (
               <RankRow
                 key={String(t.id)}
-                href="/collections"
+                href="/demo/collections"
                 rank={i + 1}
                 title={`${t.location}`}
                 sub={`consignment #${String(t.id)} · creator #${String(t.creatorId)}`}
@@ -187,7 +187,7 @@ function Trending({ holdings }: { holdings?: Holdings }) {
               />
             ))}
           </ul>
-          <ViewAll href="/collections">All collections</ViewAll>
+          <ViewAll href="/demo/collections">All collections</ViewAll>
         </>
       )}
     </Panel>

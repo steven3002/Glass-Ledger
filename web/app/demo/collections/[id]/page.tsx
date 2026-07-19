@@ -42,7 +42,7 @@ export default function CollectionPage({ params }: { params: Promise<{ id: strin
         <Panel title="No such collection" tone="alarm">
           <p className="text-sm leading-relaxed text-ink-2">
             There is no collection &ldquo;{id}&rdquo; in the catalog. Browse them all on the{" "}
-            <Link href="/collections" className="underline">
+            <Link href="/demo/collections" className="underline">
               collections page
             </Link>
             .
@@ -60,7 +60,7 @@ export default function CollectionPage({ params }: { params: Promise<{ id: strin
       <div className="flex flex-col-reverse gap-6 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-8">
         <div className="min-w-0 flex-1">
           <nav className="text-xs font-medium tracking-wide text-faint">
-            <Link href="/collections" className="transition-colors hover:text-ink">
+            <Link href="/demo/collections" className="transition-colors hover:text-ink">
               Collections
             </Link>
             <span className="mx-1.5">•</span>
@@ -108,7 +108,7 @@ export default function CollectionPage({ params }: { params: Promise<{ id: strin
             const it = itemTotals(item);
             return (
               <li key={item.id}>
-                <Link href={`/collections/${c.id}/${item.id}`} className="card-tap group block overflow-hidden p-0">
+                <Link href={`/demo/collections/${c.id}/${item.id}`} className="card-tap group block overflow-hidden p-0">
                   <ProductTile name={item.name} className="aspect-square w-full" />
                   <div className="p-3">
                     <div className="text-[10px] font-medium text-faint">
@@ -141,7 +141,7 @@ export default function CollectionPage({ params }: { params: Promise<{ id: strin
                   {tx.kind === "claimed" ? "clm" : "buy"}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <Link href={`/collections/${c.id}/${tx.itemId}`} className="truncate text-sm font-semibold text-ink hover:underline">
+                  <Link href={`/demo/collections/${c.id}/${tx.itemId}`} className="truncate text-sm font-semibold text-ink hover:underline">
                     {tx.item}
                   </Link>
                   <div className="truncate font-mono text-[0.66rem] text-faint">

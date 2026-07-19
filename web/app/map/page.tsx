@@ -150,7 +150,7 @@ export default function MapPage() {
           `${l.landlords.length === 1 ? `landlord ${shortAddress(l.landlords[0])}` : `${l.landlords.length} landlords`}`,
         lat: l.lat,
         lon: l.lon,
-        href: "/collections",
+        href: "/demo/collections",
       })),
     [list],
   );
@@ -235,7 +235,7 @@ export default function MapPage() {
                         {l.landlords.length === 1 ? shortAddress(l.landlords[0]) : `${l.landlords.length} landlords`}
                       </span>
                       <Link
-                        href="/collections"
+                        href="/demo/collections"
                         onClick={(e) => e.stopPropagation()}
                         className="shrink-0 text-[0.7rem] font-medium text-mut transition-colors hover:text-ink"
                       >

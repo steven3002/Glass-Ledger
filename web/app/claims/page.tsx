@@ -5,6 +5,7 @@
  * from her own key, through any RPC on earth.
  */
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { FiguresRow, FilterRow, PageFigure } from "@/components/browse";
@@ -41,6 +42,22 @@ export default function ClaimsPage() {
       </main>
     );
   }
+
+  /**
+   * Which item a claim is about.
+   *
+   * A claim names debts, and debts name the sale they arose from — so the item is reached through
+   * them rather than stated. Nothing in the protocol says a claim must stay within one item: it is a
+   * bundle of obligations, and a bundle can span sales. So this returns the whole set and the row
+   * only becomes a door when there is exactly one place for it to lead.
+   */
+  const itemsOf = (debtIds: readonly bigint[]): bigint[] => [
+    ...new Set(
+      debtIds
+        .map((id) => holdings?.debts.find((d) => d.id === id)?.itemId)
+        .filter((id): id is bigint => id !== undefined),
+    ),
+  ];
 
   const pending = claims.filter((c) => standingOf(c.state) === "open").length;
   const proven = claims.filter((c) => standingOf(c.state) === "proven").length;
@@ -88,7 +105,8 @@ export default function ClaimsPage() {
             <>
               <Th secondary>Claim</Th>
               <Th className="text-left sm:text-right">Amount</Th>
-              <Th>Debts</Th>
+              <Th>Item</Th>
+              <Th secondary>Debts</Th>
               <Th secondary>Posted</Th>
               <Th secondary>Challenge window</Th>
               <Th secondary>Reference</Th>
@@ -99,15 +117,43 @@ export default function ClaimsPage() {
           {paged.slice.map((claim) => {
             const window_ = windowLeft(claim.challengeDeadline, now);
             const open = claim.state === "pending";
+            const items = itemsOf(claim.debtIds);
+            const only = items.length === 1 ? items[0] : undefined;
             return (
-              <Tr key={String(claim.id)} more>
+              /* The row opens the receipt, not the item — a claim is a bundle of debts in one
+                 currency and nothing stops that bundle spanning sales, so the receipt is the only
+                 destination that is always right. The Item cell beside it stays a direct door to the
+                 root for the common case where the bundle came from one sale. */
+              <Tr key={String(claim.id)} more href={`/claims/${String(claim.id)}`}>
                 <Td label="Claim" secondary className="font-mono text-xs text-faint">
-                  #{String(claim.id)}
+                  <Link
+                    href={`/claims/${String(claim.id)}`}
+                    className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-ink"
+                  >
+                    #{String(claim.id)}
+                  </Link>
                 </Td>
                 <Td label="Amount" className="text-left font-semibold tabular-nums text-ink sm:text-right">
                   {naira(claim.totalAmount)}
                 </Td>
-                <Td label="Debts" className="text-mut">
+                {/* What the claim is ultimately about. A reader chasing "was she paid?" is chasing a
+                    sale, and the sale is the item — so it is on the row rather than folded away, and
+                    it is the one column a phone keeps beside the money and the state. */}
+                <Td label="Item">
+                  {only !== undefined ? (
+                    <Link
+                      href={`/item/${String(only)}`}
+                      className="text-mut underline decoration-line-strong underline-offset-2 transition-colors hover:text-ink"
+                    >
+                      item {String(only)}
+                    </Link>
+                  ) : items.length > 1 ? (
+                    <span className="text-mut">{items.length} items</span>
+                  ) : (
+                    <span className="text-faint">—</span>
+                  )}
+                </Td>
+                <Td label="Debts" secondary className="text-mut">
                   {claim.debtIds.length} {claim.debtIds.length === 1 ? "debt" : "debts"}
                 </Td>
                 <Td label="Posted" secondary className="text-mut">

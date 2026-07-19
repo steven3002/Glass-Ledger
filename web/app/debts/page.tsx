@@ -144,9 +144,19 @@ export default function DebtsPage() {
                     : "border-line bg-surface text-ink-2";
 
             return (
-              <Tr key={String(debt.id)} more>
+              /* The row leads to the item the debt arose from. Every leg exists because something
+                 was sold, so the item is the root a reader can always get back to — and from there
+                 to the sale, the other legs, and the claims that touched them. */
+              <Tr key={String(debt.id)} more href={`/item/${String(debt.itemId)}`}>
                 <Td label="Debt" secondary className="font-mono text-xs text-faint">
-                  #{String(debt.id)}
+                  {/* The row leads to the item, which is the root; the id leads to the leg's own
+                      dossier, for a reader who came here asking about this obligation in particular. */}
+                  <Link
+                    href={`/debts/${String(debt.id)}`}
+                    className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-ink"
+                  >
+                    #{String(debt.id)}
+                  </Link>
                 </Td>
                 <Td label="Owed to" headline>
                   <div className="flex items-center gap-3">

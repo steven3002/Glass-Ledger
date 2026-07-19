@@ -35,6 +35,15 @@ export type Debt = {
   mintedAt: bigint;
   deadline: bigint;
   amount: bigint;
+  /**
+   * The claim that asserted this debt was paid — the ref hash, not a claim id.
+   *
+   * Zero until a claim names it, and it stays pointing at the claim that died if that claim was
+   * voided: the debt goes back to aging but the record of what was asserted about it does not
+   * disappear. That is the join a reader needs to ask "who said they had paid me, and what happened
+   * to that assertion".
+   */
+  claimRef: Hex;
 };
 
 export type Claim = {
@@ -47,6 +56,16 @@ export type Claim = {
   totalAmount: bigint;
   refHash: Hex;
   debtIds: readonly bigint[];
+  /**
+   * What a settlement proof has to open against: the recipients' filed accounts, and the amounts.
+   *
+   * Committed when the claim is posted, so the operator cannot decide after the fact who it says it
+   * paid or how much. Worth reading across claims as well as within one — an operator that keeps
+   * posting the identical sale produces the identical amounts commitment, and a repeated hash is a
+   * repetition nobody had to be told about.
+   */
+  accountsCommitment: Hex;
+  amountsCommitment: Hex;
 };
 
 export type Item = {
@@ -149,6 +168,15 @@ export type Entry = {
   key: string;
   block: bigint;
   at: bigint;
+  /**
+   * The transaction this happened in.
+   *
+   * A sale is one atomic act that fires seven to thirteen events, and without the hash they read as
+   * unrelated lines. Carrying it lets a lifecycle group its stages by the moment they actually
+   * occurred, and lets any line be checked against a public explorer by somebody who trusts neither
+   * this page nor the shop behind it.
+   */
+  tx: Hex;
   name: string;
   sentence: string;
   tone: "plain" | "good" | "warn" | "alarm" | "quiet";
@@ -330,6 +358,7 @@ async function readDebts(where: Deployment, count: bigint): Promise<Debt[]> {
         mintedAt: debt.mintedAt,
         deadline: debt.deadline,
         amount: debt.amount,
+        claimRef: debt.claimRef,
       };
     }),
   );
@@ -361,6 +390,8 @@ async function readClaims(where: Deployment, count: bigint): Promise<Claim[]> {
         totalAmount: claim.totalAmount,
         refHash: claim.refHash,
         debtIds,
+        accountsCommitment: claim.accountsCommitment,
+        amountsCommitment: claim.amountsCommitment,
       };
     }),
   );
@@ -512,6 +543,7 @@ async function narrate(logs: Log[]): Promise<{ entries: Entry[]; writeOffs: Writ
       key: `${log.transactionHash}-${log.logIndex}`,
       block: log.blockNumber,
       at: blocks.get(log.blockNumber) ?? 0n,
+      tx: log.transactionHash,
       name: log.eventName,
       sentence: said.sentence,
       tone: said.tone,
@@ -593,7 +625,15 @@ function sentenceFor(name: string, args: Record<string, unknown>): Said | undefi
         tone: "plain",
       };
     case "ClaimChallenged":
-      return { sentence: `${who(args.challenger)} says she was not paid. Good has until the response deadline to prove it was.`, tone: "warn" };
+      // The challenger is carried structurally, not just spelled into the sentence. `_challenge`
+      // requires `_isRecipientOf`, so a challenger is always someone the claim itself named — which
+      // means an address here can be matched back to the exact leg they were owed, and the objection
+      // shows up on their own profile as the act of theirs that it was.
+      return {
+        sentence: `${who(args.challenger)} says she was not paid. Good has until the response deadline to prove it was.`,
+        tone: "warn",
+        who: args.challenger as Address,
+      };
     case "ClaimSettled":
       return { sentence: `Claim #${args.claimId} settled: the window closed and nobody objected.`, tone: "plain" };
     case "ClaimProven":

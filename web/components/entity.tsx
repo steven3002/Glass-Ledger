@@ -81,12 +81,22 @@ export function Plate({ address, roles, note }: { address: string; roles: Role[]
   );
 }
 
-/** One dress in the gallery: the picture, the price, and where it stands — the card is the door to its dossier. */
-export function ItemCard({ item }: { item: Item }) {
+/**
+ * One unit in the gallery: the picture, the price, and where it stands — the card is the door to its
+ * dossier.
+ *
+ * `name` and `variant` come from the catalog index when there is one, because the chain has no name
+ * for an item: it knows id 1001, and "Oak Wood, 100 ml" is the shop's word for the same unit. The
+ * price and the state underneath are always the chain's, whatever the index calls it — which is why
+ * the id stays printed on every card, as the thing the two sides agree on.
+ */
+export function ItemCard({ item, name, variant }: { item: Item; name?: string; variant?: string }) {
+  const label = name ?? item.name;
+
   return (
     <Link href={`/item/${String(item.id)}`} className="card-tap group block overflow-hidden p-0">
       <div className="relative">
-        <DressImage id={Number(item.id)} label={item.name} className="aspect-[4/5]" />
+        <DressImage id={Number(item.id)} label={label} className="aspect-[4/5]" />
         <span className="absolute left-2 top-2">
           <Badge tone={itemTone(item.state)} dot>
             {shelfWord(item.state)}
@@ -95,10 +105,13 @@ export function ItemCard({ item }: { item: Item }) {
       </div>
       <div className="p-3">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-sm font-semibold text-ink group-hover:underline">{item.name}</span>
-          <span className="text-sm font-semibold tabular-nums text-ink">{naira(item.price)}</span>
+          <span className="min-w-0 truncate text-sm font-semibold text-ink group-hover:underline">{label}</span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">{naira(item.price)}</span>
         </div>
-        <div className="mt-0.5 font-mono text-[0.68rem] text-faint">item {String(item.id)}</div>
+        <div className="mt-0.5 font-mono text-[0.68rem] text-faint">
+          item {String(item.id)}
+          {variant && <span className="ml-1.5 font-sans text-mut">· {variant}</span>}
+        </div>
       </div>
     </Link>
   );
@@ -175,11 +188,28 @@ export function ItemMoney({
   debts,
   claims,
   now,
+  price,
+  coveredBy,
 }: {
   debts: Holdings["debts"];
   claims: Holdings["claims"];
   now: number;
+  /** The sale price, when the caller knows it — so the split can be shown adding up to something. */
+  price?: bigint;
+  /** Who collected each defaulted debt, learned from the log: debt id → the stranger's address. */
+  coveredBy?: Map<string, string>;
 }) {
+  const claimFor = (ref: string) =>
+    ref && !/^0x0+$/.test(ref) ? claims.find((c) => c.refHash.toLowerCase() === ref.toLowerCase()) : undefined;
+
+  // The split, checked rather than asserted. "Retained" is the operator paying itself, so it is the
+  // one leg nobody is owed — separating it is the difference between what the sale distributed and
+  // what the shop kept.
+  const minted = debts.reduce((n, d) => n + d.amount, 0n);
+  const retained = debts.filter((d) => d.state === "retained").reduce((n, d) => n + d.amount, 0n);
+  const outward = minted - retained;
+  const balances = price !== undefined && minted === price;
+
   return (
     <Panel
       title="Where the money went"
@@ -188,41 +218,84 @@ export function ItemMoney({
       {debts.length === 0 ? (
         <Empty>No sale yet, so no debts. The split exists on paper; the mint waits for the counter.</Empty>
       ) : (
-        <ul className="space-y-1.5">
-          {debts.map((debt) => {
-            const clock = untilDeadline(debt.deadline, now);
-            const inDefault = debt.state === "aging" && clock.overdue;
-            return (
-              <li key={String(debt.id)} className="flex items-center gap-3 rounded-2xl p-2.5 transition-colors hover:bg-sunken">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold capitalize text-ink">the {debt.role}</div>
-                  <div className="mt-0.5 font-mono text-[0.68rem] text-faint">
-                    debt #{String(debt.id)} · {debt.rail} · <WhoLink address={debt.recipient} />
+        <>
+          <ul className="space-y-1">
+            {debts.map((debt) => {
+              const clock = untilDeadline(debt.deadline, now);
+              const inDefault = debt.state === "aging" && clock.overdue;
+              const claim = claimFor(debt.claimRef);
+              const covered = coveredBy?.get(String(debt.id));
+
+              return (
+                <li key={String(debt.id)} className="rounded-2xl p-2.5 transition-colors hover:bg-sunken">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold capitalize text-ink">the {debt.role}</div>
+                      <div className="mt-0.5 font-mono text-[0.68rem] text-faint">
+                        <Link
+                          href={`/debts/${String(debt.id)}`}
+                          className="underline decoration-line-strong underline-offset-2 transition-colors hover:text-ink"
+                        >
+                          debt #{String(debt.id)}
+                        </Link>{" "}
+                        · {debt.rail} · <WhoLink address={debt.recipient} />
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-ink">
+                      {naira(debt.amount)}
+                    </div>
+                    <Badge
+                      tone={
+                        inDefault
+                          ? "alarm"
+                          : debt.state === "proven"
+                            ? "good"
+                            : debt.state === "claimed"
+                              ? "warn"
+                              : debt.state === "retained"
+                                ? "quiet"
+                                : "plain"
+                      }
+                      dot
+                    >
+                      {inDefault ? "in default" : debt.state}
+                    </Badge>
                   </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm font-semibold tabular-nums text-ink">{naira(debt.amount)}</div>
-                </div>
-                <Badge
-                  tone={
-                    inDefault
-                      ? "alarm"
-                      : debt.state === "proven"
-                        ? "good"
-                        : debt.state === "claimed"
-                          ? "warn"
-                          : debt.state === "retained"
-                            ? "quiet"
-                            : "plain"
-                  }
-                  dot
-                >
-                  {inDefault ? "in default" : debt.state}
-                </Badge>
-              </li>
-            );
-          })}
-        </ul>
+
+                  {/* How it ended, in a sentence — a status word alone cannot distinguish a leg that
+                      was paid from one whose claim died and left it aging from the day it was born. */}
+                  <p className={`mt-1 text-[0.72rem] leading-relaxed ${inDefault ? "text-bad" : "text-mut"}`}>
+                    {debtResolution({ debt, claim, clock, inDefault, covered })}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+
+          <dl className="mt-4 space-y-1.5 border-t border-line pt-4 text-[0.78rem]">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-faint">Owed outward</dt>
+              <dd className="font-semibold tabular-nums text-ink">{naira(outward)}</dd>
+            </div>
+            {retained > 0n && (
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-faint">Good&rsquo;s commission, retained</dt>
+                <dd className="tabular-nums text-mut">{naira(retained)}</dd>
+              </div>
+            )}
+            <div className="flex items-baseline justify-between gap-4 border-t border-line pt-1.5">
+              <dt className="text-faint">Minted in total</dt>
+              <dd className="font-semibold tabular-nums text-ink">{naira(minted)}</dd>
+            </div>
+            {price !== undefined && (
+              <p className={`pt-1 text-[0.7rem] leading-relaxed ${balances ? "text-mut" : "text-bad"}`}>
+                {balances
+                  ? `The legs add up to the ${naira(price)} the item sold for. Nothing was withheld from the split and nothing was invented into it.`
+                  : `The legs add up to ${naira(minted)}, but the item sold for ${naira(price)}. That difference should not exist.`}
+              </p>
+            )}
+          </dl>
+        </>
       )}
 
       {claims.length > 0 && (
@@ -248,4 +321,51 @@ export function ItemMoney({
       )}
     </Panel>
   );
+}
+
+/**
+ * What actually became of one leg, said in a sentence rather than a status word.
+ *
+ * Exported so the item dossier and the debt's own page cannot drift: a leg that reads "collectable by
+ * anyone, right now" in one place must read the same in the other, because it is the same fact.
+ */
+export function debtResolution({
+  debt,
+  claim,
+  clock,
+  inDefault,
+  covered,
+}: {
+  debt: Holdings["debts"][number];
+  claim?: Holdings["claims"][number];
+  clock: { text: string; overdue: boolean };
+  inDefault: boolean;
+  covered?: string;
+}): string {
+  const under = claim ? ` under claim #${String(claim.id)}` : "";
+
+  switch (debt.state) {
+    case "retained":
+      return "Good's own commission. The payer and the payee are the same party, so nothing was ever owed outward.";
+    case "proven":
+      return `Backed by evidence${under}. This is the only state that earns Good any capacity.`;
+    case "claimed":
+      return claim && claim.state === "voided"
+        ? `Claim #${String(claim.id)} died — Good said it had paid and could not prove it.`
+        : `Good says it has paid this${under}. The recipient can still say otherwise, from her own key.`;
+    case "settled":
+      return `The challenge window closed with nobody objecting${under}. Still owed evidence at the sweep.`;
+    case "defaulted":
+      return covered
+        ? `The deadline passed. ${covered.slice(0, 6)}…${covered.slice(-4)} — a stranger, with nothing at stake — collected it; the pool paid the recipient in full and Good's allowance was written down fivefold.`
+        : "The deadline passed. The pool paid the recipient in full, and Good's allowance was written down fivefold.";
+    case "discharged":
+      return "Extinguished by performance — the item was handed over, so the refund it guaranteed is owed to nobody.";
+    case "aging":
+      return inDefault
+        ? `${clock.text}. Collectable by anyone, right now — the collector need not be the person who is owed.`
+        : `On the clock: ${clock.text}.${claim && claim.state === "voided" ? " Back to aging from the day it was born, because the claim over it was voided." : ""}`;
+    default:
+      return "—";
+  }
 }
