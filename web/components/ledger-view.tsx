@@ -184,13 +184,33 @@ export function DebtSummary({
 export function CageRow({ cage, level = [] }: { cage: Cage; level?: PoolPoint[] }) {
   const { ceiling, pool, record } = cage;
   const shut = ceiling.headroom === 0n;
+
+  // By how much exposure has outrun the ceiling — and it can, without any rule having been bypassed.
+  //
+  // `headroomOf` clamps at zero rather than going negative, so the contract reports "none left" for
+  // both a cage that is exactly full and one that is over the line. They are not the same fact, and
+  // this panel promises to compare what Good holds against what it is allowed to hold: answering
+  // "all of it" when the answer is "more than all of it" is the one thing it must not do.
+  //
+  // Every sale here was authorised at the moment it was made. What pushes the total past the line
+  // afterwards is a punishment landing — a void's fine is charged into the cage the instant it falls
+  // due, and the ceiling itself moves with the pool. An operator watching this go over is watching
+  // the penalty work, which is worth showing rather than rounding away.
+  const over = ceiling.used > ceiling.ceiling ? ceiling.used - ceiling.ceiling : 0n;
+
+  // The bar is drawn against whichever is larger, so an overshoot is rendered as an overshoot. Scaled
+  // against the ceiling alone the parts summed past 100%, and `overflow-hidden` quietly cropped the
+  // excess — leaving a bar that looked exactly full at the very moment it was not.
+  const span = ceiling.used > ceiling.ceiling ? ceiling.used : ceiling.ceiling;
   const segs = [
-    { pct: pct(ceiling.custody, ceiling.ceiling), fill: "var(--color-ink-2)", label: "held for people", value: naira(ceiling.custody) },
-    { pct: pct(ceiling.reimbursements, ceiling.ceiling), fill: "var(--color-accent-fill)", label: "owed to the pool", value: naira(ceiling.reimbursements) },
-    { pct: pct(ceiling.unpaidFines, ceiling.ceiling), fill: "var(--color-bad-fill)", label: "unpaid fines", value: naira(ceiling.unpaidFines) },
-    { pct: pct(ceiling.headroom, ceiling.ceiling), fill: "var(--color-good-fill)", label: "free to sell", value: naira(ceiling.headroom) },
+    { pct: pct(ceiling.custody, span), fill: "var(--color-ink-2)", label: "held for people", value: naira(ceiling.custody) },
+    { pct: pct(ceiling.reimbursements, span), fill: "var(--color-accent-fill)", label: "owed to the pool", value: naira(ceiling.reimbursements) },
+    { pct: pct(ceiling.unpaidFines, span), fill: "var(--color-bad-fill)", label: "unpaid fines", value: naira(ceiling.unpaidFines) },
+    { pct: pct(ceiling.headroom, span), fill: "var(--color-good-fill)", label: "free to sell", value: naira(ceiling.headroom) },
   ];
-  const freePct = pct(ceiling.headroom, ceiling.ceiling);
+  const freePct = pct(ceiling.headroom, span);
+  // Where the limit falls along that bar, so the part beyond it is visibly beyond it.
+  const limitPct = over > 0n ? pct(ceiling.ceiling, span) : 100;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
@@ -224,11 +244,17 @@ export function CageRow({ cage, level = [] }: { cage: Cage; level?: PoolPoint[] 
               >
                 {naira(ceiling.headroom)}
               </span>
-              <Delta tone={shut ? "alarm" : "good"}>{shut ? "0 left" : "for the next cash sale"}</Delta>
+              <Delta tone={shut ? "alarm" : "good"}>
+                {over > 0n ? `over by ${naira(over)}` : shut ? "0 left" : "for the next cash sale"}
+              </Delta>
             </div>
             <div className="mt-4 flex gap-8">
               <Support label="Ceiling" value={naira(ceiling.ceiling)} />
-              <Support label="Being held" value={naira(ceiling.used)} />
+              {/* Not "being held": of this total only `custody` is money in Good's hands. The rest is
+                  what it owes and has not paid — charged into the same cage on purpose, so that
+                  refusing to pay throttles its own till. Labelling the sum "held" would misdescribe
+                  a fine as somebody's money. */}
+              <Support label="Charged to the cage" value={naira(ceiling.used)} />
             </div>
           </div>
           {/* Wrapped onto a line of its own, the dial centres rather than hanging off the left edge. */}
@@ -238,11 +264,28 @@ export function CageRow({ cage, level = [] }: { cage: Cage; level?: PoolPoint[] 
         </div>
 
         <div className="mt-6">
-          <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full bg-sunken ring-1 ring-line ring-inset">
+          <div className="relative flex h-3.5 gap-0.5 overflow-hidden rounded-full bg-sunken ring-1 ring-line ring-inset">
             {segs.map((s, i) =>
               s.pct > 0 ? <span key={i} className="h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${s.pct}%`, background: s.fill }} title={`${s.label} · ${s.value}`} /> : null,
             )}
+            {/* The limit, marked on the bar it has been passed. Without it the over-full case and the
+                exactly-full case draw identically — a solid bar, end to end — and the reader has no
+                way to see that the far end is the part Good was never allowed. */}
+            {over > 0n && (
+              <span
+                className="absolute inset-y-0 w-0.5 bg-ink"
+                style={{ left: `${limitPct}%` }}
+                title={`the ceiling — ${naira(ceiling.ceiling)}; everything right of this is over it`}
+              />
+            )}
           </div>
+          {over > 0n && (
+            <p className="mt-2 text-xs leading-relaxed text-bad">
+              The mark is the ceiling. Everything to the right of it is {naira(over)} Good is carrying
+              beyond what it is allowed to — every sale was permitted when it was made, and the fines
+              that fell due afterwards are charged into the same cage.
+            </p>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-4">
             {segs.map((s, i) => (
               <div key={i} className="flex items-start gap-1.5">
