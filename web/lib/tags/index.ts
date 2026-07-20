@@ -26,7 +26,48 @@ export type Consignment = {
   trancheId: number;
   root: Hex;
   items: { id: number; price: string; digest: Hex; pointer: Hex }[];
+  /**
+   * A second consignment in the same file: the invented creator's.
+   *
+   * It is a whole consignment of its own — its own creator, its own tranche, its own root — and it
+   * must be verified against *its* root, never the first one's. Checking a farm item against the real
+   * creator's tree produces a confident, wrong verdict: the walk fails and the page calls a genuine
+   * tag a forgery. Every function here that verifies must first find the block the item belongs to.
+   */
+  farm?: Block;
+
+  /**
+   * And the rest of the shop: one block per line per town.
+   *
+   * Same shape, same rules, no special case — each carries its own creator, its own tranche and its
+   * own root, and each is verified against that root alone. There is nothing the reader should be
+   * able to tell about which of these a tag came from except by reading it.
+   */
+  catalog?: Block[];
 };
+
+/** One consignment on its own: a creator, a tranche, a root, and the leaves under it. */
+export type Block = Omit<Consignment, "farm" | "catalog">;
+
+/**
+ * The consignment block an item belongs to — the tree its proof must be walked against.
+ *
+ * Getting this wrong is not a missing page, it is a wrong verdict: walk a genuine item's proof
+ * against a tree it was never in and the browser reports a **forgery**, confidently, with a correct
+ * implementation. Which is why an item that belongs to no known block returns undefined and the
+ * caller has to say so, rather than falling back to the first tree and guessing.
+ */
+export function blockFor(consignment: Consignment, itemId: number | bigint): Block | undefined {
+  const id = Number(itemId);
+  return blocksOf(consignment).find((block) => block.items.some((i) => i.id === id));
+}
+
+/** Every consignment in the published file, the creator's first. */
+export const blocksOf = (consignment: Consignment): Block[] => [
+  consignment,
+  ...(consignment.farm ? [consignment.farm] : []),
+  ...(consignment.catalog ?? []),
+];
 
 export type WallTag = {
   id: string;

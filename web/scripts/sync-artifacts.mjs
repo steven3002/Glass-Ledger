@@ -128,8 +128,31 @@ async function copyPublishedBlobs() {
   // One shelf per chain. A consignment belongs to the deployment that posted it — its tranche id, its
   // root and its leaves are that chain's — so two networks cannot share a file without the second one
   // silently erasing the first. The relayer names the directory; this reads the same variable.
-  const demo = process.env.GLASS_DATA_DIR ?? path.join(root, "artifacts", "demo");
+  //
+  // A relative value is resolved against the REPO ROOT, not against this script's working directory.
+  // The relayer's scripts export it as a repo-root path, and a hosting provider's dashboard is a
+  // natural place to type `artifacts/demo/16602` — which, resolved from `web/`, points at nothing.
+  // That is not a crash: the sync shrugs, the build succeeds, and the deployed shop has an empty
+  // shelf. It cost a deploy to find, once.
+  const configured = process.env.GLASS_DATA_DIR;
+  const demo = configured
+    ? path.resolve(root, configured)
+    : path.join(root, "artifacts", "demo");
+
   if (!existsSync(path.join(demo, "consignment.json"))) {
+    // On a development chain this is an ordinary state — nothing has been seeded yet, and the pages
+    // say so plainly. On any other chain it is a shop with no goods and no provable tags, and it
+    // must not be possible to ship it by accident.
+    const chain = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 31337);
+    if (chain !== 31337 && chain !== 1337) {
+      throw new Error(
+        `no consignment at ${demo}, and this build targets chain ${chain}. Shipping it would put a ` +
+          `shop on screen with an empty shelf and not one tag a reader could verify — which looks ` +
+          `like a finished site, not a broken one. Point GLASS_DATA_DIR at that chain's shelf ` +
+          `(e.g. artifacts/demo/${chain}, relative to the repo root) and make sure it is committed: ` +
+          `a hosting build sees the git checkout and nothing else.`,
+      );
+    }
     console.log("  no consignment yet (seed first; the pages will say so plainly)");
     return;
   }

@@ -20,7 +20,7 @@ import { usePaged } from "@/components/paged";
 import { Avatar } from "@/components/product";
 import { TableShell, Td, Th, Tr } from "@/components/table";
 import { Badge, Skeleton } from "@/components/ui";
-import { naira, shortAddress } from "@/lib/format";
+import { naira, shortAddress, nairaShort } from "@/lib/format";
 import { profilesOf, type Profile } from "@/lib/ledger/profiles";
 
 const MEDAL = ["#d9a441", "#a9b0bb", "#c08457"]; // gold, silver, bronze
@@ -70,7 +70,7 @@ export default function CommunityPage() {
       <FiguresRow>
         <PageFigure label="Referrers" value={owners ? String(owners.length) : undefined} first />
         <PageFigure label="Referrals" value={totalReferrals !== undefined ? String(totalReferrals) : undefined} />
-        <PageFigure label="Paid to community" value={totalMinted !== undefined ? naira(totalMinted) : undefined} tone="good" />
+        <PageFigure label="Paid to community" value={totalMinted !== undefined ? nairaShort(totalMinted) : undefined} title={totalMinted !== undefined ? naira(totalMinted) : undefined} tone="good" />
         <PageFigure label="Defaults" value={defaults !== undefined ? String(defaults) : undefined} tone={(defaults ?? 0) > 0 ? "alarm" : "plain"} />
       </FiguresRow>
 

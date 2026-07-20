@@ -17,6 +17,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { CageRow, CageRowSkeleton, ChainError, PageHeader, Timeline, useLedger } from "@/components/ledger-view";
+import { poolSeries } from "@/lib/ledger";
 import { Badge, Panel, Skeleton } from "@/components/ui";
 import { naira, shortAddress } from "@/lib/format";
 import type { Cage, Holdings } from "@/lib/ledger";
@@ -64,7 +65,7 @@ export default function Overview() {
         ))}
       </div>
 
-      {cage ? <CageRow cage={cage} /> : <CageRowSkeleton />}
+      {cage ? <CageRow cage={cage} level={history ? poolSeries(history.entries) : []} /> : <CageRowSkeleton />}
 
       {/* The live record, beside what is selling. */}
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">

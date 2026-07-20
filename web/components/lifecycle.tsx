@@ -22,6 +22,7 @@
 
 import type { ReactNode } from "react";
 
+import { Pager, usePaged } from "./paged";
 import { Empty } from "./ui";
 import { explorerTx } from "@/lib/chain";
 import { when } from "@/lib/format";
@@ -90,18 +91,27 @@ function gap(seconds: number): string {
   return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h later`;
 }
 
-export function Lifecycle({ entries, empty }: { entries: Entry[]; empty: string }) {
+export function Lifecycle({ entries, empty, size = 8 }: { entries: Entry[]; empty: string; size?: number }) {
   const moments = momentsOf(entries);
+
+  // The gap is measured against the moment that actually preceded it, not the one above it on the
+  // page. Computed before paging for that reason: a life read ten moments at a time would otherwise
+  // open every page with a missing interval and close it with one measured from the wrong place.
+  const spaced = moments.map((moment, i) => ({
+    moment,
+    since: i > 0 ? Number(moment.at) - Number(moments[i - 1].at) : undefined,
+  }));
+  const paged = usePaged(spaced, size);
+
   if (moments.length === 0) return <Empty>{empty}</Empty>;
 
   return (
+    <>
     <ol className="relative">
-      {moments.map((moment, i) => {
-        const previous = i > 0 ? moments[i - 1] : undefined;
-        const since = previous ? Number(moment.at) - Number(previous.at) : undefined;
+      {paged.slice.map(({ moment, since }, i) => {
         const tone = toneOf(moment);
         const href = explorerTx(moment.tx);
-        const last = i === moments.length - 1;
+        const last = i === paged.slice.length - 1;
 
         return (
           <li key={moment.tx} className="relative pl-7">
@@ -145,6 +155,18 @@ export function Lifecycle({ entries, empty }: { entries: Entry[]; empty: string 
         );
       })}
     </ol>
+
+    <Pager
+      page={paged.page}
+      pages={paged.pages}
+      start={paged.start}
+      size={paged.size}
+      total={paged.total}
+      onPrev={paged.prev}
+      onNext={paged.next}
+      noun="moments"
+    />
+    </>
   );
 }
 

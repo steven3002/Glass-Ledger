@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -32,6 +33,15 @@ type Ops struct {
 	Store  storage.Store
 	Config Config
 	Say    func(format string, args ...any)
+
+	// The catalog creators' signing keys, by the creator id the registry issued them.
+	//
+	// Empty for the original demo, which knows exactly two creators and holds both their keys in
+	// `Keys`. A scenario that sells the s13 catalog fills this in, and a verb asked to act on one of
+	// those items without it fails loudly rather than signing with the operator's key — which would
+	// forge the creator's signature and still be accepted by the gateway, since a gateway that could
+	// tell would be a gateway that had solved identity.
+	CreatorKeys map[uint64]*ecdsa.PrivateKey
 }
 
 // Config is the demo's shape: what is on the shelf and what it costs.
@@ -117,6 +127,20 @@ type Consignment struct {
 	// It does not have to. Whatever the operator earns by trading with her, it can spend only on her —
 	// and she has nothing to sell.
 	Farm *Tranche `json:"farm,omitempty"`
+
+	// The rest of the shop: every consignment the s13 catalog posted, one per line per town.
+	//
+	// A list rather than two more named fields, because this part grows — a creator opening a second
+	// line or selling into a fourth town is one more entry here and no change anywhere else. What it
+	// is NOT is a different kind of thing: these are the same tranches, posted the same way, proved
+	// the same way. They live apart from `Tranche` only because that one is promoted to the top level
+	// and there can be exactly one of it.
+	//
+	// Anything reading the shelf has to read this too. An item minted into a tranche that nothing
+	// enumerates is an item on chain that the ledger cannot see: it has a price, a state and an owner,
+	// and the page renders a blank where they should be — which reads as "not for sale" rather than
+	// as "we did not look".
+	Catalog []Tranche `json:"catalog,omitempty"`
 }
 
 // Tranche is one creator's consignment: who she is, what she posted, and every item under it.
@@ -191,11 +215,107 @@ func (t Tranche) index(itemID uint64) (int, error) {
 // The community leg mints against a presented voucher and against nothing else. Half of a referral is
 // not a referral, and an operator that could mint the leg without one could mint it to itself.
 func (o *Ops) saleInput(ctx context.Context, itemID uint64, withCommunity bool) (bindings.SaleGatewaySaleInput, error) {
-	consignment, err := o.Consignment()
+	tranche, signer, err := o.blockOf(itemID)
 	if err != nil {
 		return bindings.SaleGatewaySaleInput{}, err
 	}
-	return o.saleInputFrom(ctx, consignment.Tranche, o.Keys.Creator, itemID, withCommunity)
+	return o.saleInputFrom(ctx, tranche, signer, itemID, withCommunity)
+}
+
+// blockOf finds the consignment an item belongs to, and the key that signs for it.
+//
+// Every verb that touches an item goes through here, so a sale, a commitment and a write-off all
+// agree about which tranche an item is in. Guessing wrong is not a missing record: the proof is
+// walked against the wrong tree, the gateway rejects a genuine item, and the operator's own shop
+// refuses to sell its own stock.
+//
+// The signer is decided by which consignment it is, never by lookup on the item:
+//
+//	the creator's own tranche   → her key. She signed these, and only she could have.
+//	the invented creator's      → the operator's, because she IS the operator. That is the attack,
+//	                              not a shortcut, and it is the reason the farm exists at all.
+//	a catalog consignment       → the key registered for that creator id, supplied by the caller.
+func (o *Ops) blockOf(itemID uint64) (Tranche, *ecdsa.PrivateKey, error) {
+	consignment, err := o.Consignment()
+	if err != nil {
+		return Tranche{}, nil, err
+	}
+
+	if _, err := consignment.Tranche.index(itemID); err == nil {
+		return consignment.Tranche, o.Keys.Creator, nil
+	}
+	if consignment.Farm != nil {
+		if _, err := consignment.Farm.index(itemID); err == nil {
+			return *consignment.Farm, o.Keys.Operator, nil
+		}
+	}
+	for _, tranche := range consignment.Catalog {
+		if _, err := tranche.index(itemID); err != nil {
+			continue
+		}
+		key, ok := o.CreatorKeys[tranche.CreatorID]
+		if !ok {
+			return Tranche{}, nil, fmt.Errorf(
+				"item %d is in consignment #%d, posted by creator #%d, and no signing key for her was "+
+					"supplied. Her vouchers are checked against her own key — the operator cannot sign "+
+					"for her, which is the point of her having one",
+				itemID, tranche.TrancheID, tranche.CreatorID)
+		}
+		return tranche, key, nil
+	}
+
+	return Tranche{}, nil, fmt.Errorf("item %d is in no consignment on file", itemID)
+}
+
+// AdoptCreatorKeys teaches this operator which key signs for which registered creator.
+//
+// Given a list of private keys, it asks the registry which id — if any — each one holds, and files it
+// under that id. Keys the registry has never seen are ignored: a deployment may carry keys for
+// creators who have not been registered on this particular chain, and that is not an error.
+//
+// It takes keys rather than reading the catalog itself so that `internal/ops` stays what it is — the
+// protocol, and nothing about which goods a particular demo happens to sell.
+func (o *Ops) AdoptCreatorKeys(ctx context.Context, hexKeys []string) error {
+	count, err := o.C.Registry.CreatorCount(callOpts(ctx))
+	if err != nil {
+		return err
+	}
+
+	registered := map[common.Address]uint64{}
+	for id := uint64(1); id <= count.Uint64(); id++ {
+		key, err := o.C.Registry.KeyOf(callOpts(ctx), new(big.Int).SetUint64(id))
+		if err != nil {
+			return err
+		}
+		registered[key] = id
+	}
+
+	if o.CreatorKeys == nil {
+		o.CreatorKeys = map[uint64]*ecdsa.PrivateKey{}
+	}
+	for _, hexKey := range hexKeys {
+		key, err := crypto.HexToECDSA(strings.TrimPrefix(strings.TrimSpace(hexKey), "0x"))
+		if err != nil {
+			return fmt.Errorf("creator key: %w", err)
+		}
+		if id, ok := registered[crypto.PubkeyToAddress(key.PublicKey)]; ok {
+			o.CreatorKeys[id] = key
+		}
+	}
+	return nil
+}
+
+// CreatorOfConsigned answers which creator and which tranche an item was consigned under, from the
+// published paperwork rather than from the chain's item slot.
+//
+// The slot is lazy — it names a tranche only after something has touched the item — so for anything
+// still standing on the shelf the chain's answer is zero and the paperwork's is the true one.
+func (o *Ops) CreatorOfConsigned(itemID uint64) (creator, tranche uint64, err error) {
+	block, _, err := o.blockOf(itemID)
+	if err != nil {
+		return 0, 0, err
+	}
+	return block.CreatorID, block.TrancheID, nil
 }
 
 // saleInputFrom is the same, for a named tranche signed by a named key.
@@ -328,6 +448,4 @@ func communityVoucherHash(itemID uint64) [32]byte {
 	return crypto.Keccak256Hash([]byte(fmt.Sprintf("glass-ledger/attribution/%d", itemID)))
 }
 
-func metadataHash(itemID uint64) [32]byte {
-	return crypto.Keccak256Hash([]byte(fmt.Sprintf("glass-ledger/item/%d", itemID)))
-}
+func metadataHash(itemID uint64) [32]byte { return voucher.MetadataHash(itemID) }

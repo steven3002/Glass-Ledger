@@ -37,6 +37,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
+	"goodhouse/relayer/internal/catalog"
 	"goodhouse/relayer/internal/feeds"
 	"goodhouse/relayer/internal/ops"
 )
@@ -97,6 +98,13 @@ func run() error {
 	// a way that reads like a network fault. This is the one thing the demo needs that the operator's
 	// service must never have.
 	o.Client.DevTime = *devTime
+
+	// The catalog creators' keys, if this chain carries their goods. Without them any verb that has to
+	// prove membership for a catalog item — a sale, a commitment, a write-off — cannot assemble one,
+	// because her voucher is checked against her key and the operator does not hold it.
+	if err := o.AdoptCreatorKeys(ctx, catalog.CreatorKeys()); err != nil {
+		return err
+	}
 
 	switch command {
 	case "seed":

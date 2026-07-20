@@ -56,17 +56,27 @@ export function PageFigure({
   value,
   tone = "plain",
   first = false,
+  title,
 }: {
   label: string;
   value?: string;
   tone?: "plain" | "good" | "alarm";
   first?: boolean;
+  /** The figure in full, when the one shown is abbreviated. */
+  title?: string;
 }) {
   return (
-    <div className={`max-sm:px-0 px-5 ${first ? "pl-0" : ""}`}>
+    <div className={`min-w-0 max-sm:px-0 px-5 ${first ? "pl-0" : ""}`}>
       <dt className="text-[0.6rem] font-medium uppercase tracking-[0.12em] text-faint">{label}</dt>
       {value !== undefined ? (
-        <dd className={`mt-1 text-lg font-bold tabular-nums ${tone === "good" ? "text-good" : tone === "alarm" ? "text-bad" : "text-ink"}`}>
+        /* `break-words` rather than `truncate`: a figure cut off with an ellipsis is a number the
+           reader cannot use, and a wrong number read confidently is worse than a wrapped one. */
+        <dd
+          title={title}
+          className={`mt-1 text-lg font-bold break-words tabular-nums ${
+            tone === "good" ? "text-good" : tone === "alarm" ? "text-bad" : "text-ink"
+          }`}
+        >
           {value}
         </dd>
       ) : (

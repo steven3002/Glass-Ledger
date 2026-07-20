@@ -14,6 +14,7 @@ package voucher
 
 import (
 	"crypto/ecdsa"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,6 +27,22 @@ type Voucher struct {
 	ItemID         *big.Int
 	MetadataHash   [32]byte
 	SplitPolicyRef [32]byte
+}
+
+// MetadataHash is what an item's voucher commits to about the item itself.
+//
+// It lives here, alone, because it is a *committed* value: it goes into the leaf, the leaf goes into
+// the root, and the root is on chain. Two places computing it two ways do not produce an error — they
+// produce a genuine tag that fails its own Merkle proof and is reported to the reader as a forgery,
+// by a verifier working perfectly. That happened: the seeder hashed the id's raw bytes while the
+// relayer hashed "glass-ledger/item/<id>", and every catalog item was consequently unsellable.
+//
+// It commits to the id and nothing else. The published blob beside it carries the name, the size, the
+// line and the town — none of which are covered by this hash, and none of which the chain can check.
+// That is the existing boundary, not an oversight of this function: what a tag proves is *who signed
+// for which item under which split*, and what it is called is the catalog's word.
+func MetadataHash(itemID uint64) [32]byte {
+	return crypto.Keccak256Hash([]byte(fmt.Sprintf("glass-ledger/item/%d", itemID)))
 }
 
 var (

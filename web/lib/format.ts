@@ -15,6 +15,25 @@ export function naira(amount: bigint | undefined): string {
   return `₦${whole.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Naira, abbreviated — for a figure read at a glance rather than reconciled.
+ *
+ * ₦63,750,000 is eleven characters and it breaks the row it sits in; ₦63.75m is six and says the same
+ * thing to somebody scanning. Used only on summary figures, never where a number is being checked:
+ * a reader auditing a sum needs every digit, and the pages that show one give it in full.
+ *
+ * Rounded to two decimals, so the abbreviation never claims more precision than it has.
+ */
+export function nairaShort(amount: bigint | undefined): string {
+  if (amount === undefined) return "—";
+  const whole = Number(formatUnits(amount, 18));
+  const trim = (n: number) => String(Number(n.toFixed(2)));
+  if (Math.abs(whole) >= 1_000_000_000) return `₦${trim(whole / 1_000_000_000)}bn`;
+  if (Math.abs(whole) >= 1_000_000) return `₦${trim(whole / 1_000_000)}m`;
+  if (Math.abs(whole) >= 100_000) return `₦${trim(whole / 1_000)}k`;
+  return naira(amount);
+}
+
 /** An address, short enough to read aloud. */
 export const shortAddress = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
 

@@ -23,7 +23,7 @@ import { CardSkeleton, ChainError, Debts, Timeline, useLedger } from "@/componen
 import { ProductTile } from "@/components/product";
 import { Badge, Bytes, Empty, Panel, Skeleton } from "@/components/ui";
 import { abi, deployment, NGN, publicClient } from "@/lib/chain";
-import { naira, shortAddress, untilDeadline, when } from "@/lib/format";
+import { naira, nairaShort, shortAddress, untilDeadline, when } from "@/lib/format";
 import type { Entry } from "@/lib/ledger";
 import type { Profile } from "@/lib/ledger/profiles";
 import { linesAbout, profileOf } from "@/lib/ledger/profiles";
@@ -130,11 +130,12 @@ export default function WhoPage({ params }: { params: Promise<{ address: string 
                 )}
                 <PageFigure
                   label="Ever minted"
-                  value={naira(profile.purse.minted)}
+                  value={nairaShort(profile.purse.minted)}
+                  title={naira(profile.purse.minted)}
                   first={!hosts && !profile.roles.includes("community")}
                 />
-                <PageFigure label="Owed now" value={naira(profile.purse.owedNow)} />
-                <PageFigure label="Proven paid" value={naira(profile.purse.proven)} tone="good" />
+                <PageFigure label="Owed now" value={nairaShort(profile.purse.owedNow)} title={naira(profile.purse.owedNow)} />
+                <PageFigure label="Proven paid" value={nairaShort(profile.purse.proven)} title={naira(profile.purse.proven)} tone="good" />
                 <PageFigure
                   label="In default"
                   value={String(overdueNow + profile.purse.defaultedCount)}

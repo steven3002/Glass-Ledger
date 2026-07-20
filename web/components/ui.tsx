@@ -12,12 +12,16 @@
 
 import type { CSSProperties, ReactNode } from "react";
 
+import { Info } from "./info";
 import { TrendDownIcon, TrendUpIcon } from "./icons";
 
-type Tone = "plain" | "alarm" | "warn" | "good";
+type Tone = "plain" | "alarm" | "warn" | "good" | "ash";
 
 const PANEL_TINT: Record<Tone, string> = {
   plain: "",
+  // Ash: a panel that is set apart without being accused of anything. Red says "this is wrong" and
+  // Good's record is not wrong — it is simply the most consequential thing on the page.
+  ash: "border-line-strong",
   alarm: "border-[color-mix(in_oklab,var(--color-bad-fill)_45%,var(--color-line))]",
   warn: "border-[color-mix(in_oklab,var(--color-accent-fill)_45%,var(--color-line))]",
   good: "border-[color-mix(in_oklab,var(--color-good-fill)_45%,var(--color-line))]",
@@ -25,6 +29,7 @@ const PANEL_TINT: Record<Tone, string> = {
 
 const PANEL_GLOW: Record<Tone, CSSProperties | undefined> = {
   plain: undefined,
+  ash: { background: "linear-gradient(180deg, var(--color-sunken), white)" },
   alarm: { background: "linear-gradient(180deg, color-mix(in oklab, var(--color-bad-fill) 5%, white), white)" },
   warn: { background: "linear-gradient(180deg, color-mix(in oklab, var(--color-accent-fill) 6%, white), white)" },
   good: { background: "linear-gradient(180deg, color-mix(in oklab, var(--color-good-fill) 5%, white), white)" },
@@ -33,22 +38,39 @@ const PANEL_GLOW: Record<Tone, CSSProperties | undefined> = {
 export function Panel({
   title,
   hint,
+  info,
   children,
   tone = "plain",
+  right,
 }: {
   title?: string;
+  /** Printed under the title, for a line short enough that a reader gains nothing by hiding it. */
   hint?: string;
+  /**
+   * The longer explanation, folded behind an (i) beside the title.
+   *
+   * For prose that a reader needs once and never again. Printed in full it competes with the data it
+   * describes; behind a dot it is still one click away for the person who has not met this page
+   * before, which is the whole audience the first time.
+   */
+  info?: ReactNode;
   children: ReactNode;
   tone?: Tone;
+  /** Anything that belongs on the title's line — a figure, a control. */
+  right?: ReactNode;
 }) {
   return (
     <section className={`card p-5 sm:p-6 ${PANEL_TINT[tone]}`} style={PANEL_GLOW[tone]}>
       {title && (
-        <header className="mb-4 flex items-baseline justify-between gap-4">
+        <header className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
-            <h2 className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">{title}</h2>
+            <h2 className="flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-mut">
+              {title}
+              {info && <Info label={title.toLowerCase()}>{info}</Info>}
+            </h2>
             {hint && <p className="mt-1.5 text-sm leading-relaxed text-mut">{hint}</p>}
           </div>
+          {right}
         </header>
       )}
       {children}
@@ -208,17 +230,26 @@ export function StatCard({
   trend,
   trendTone = "plain",
   note,
+  spark,
 }: {
   label: string;
   value: ReactNode;
   trend?: string;
   trendTone?: "good" | "alarm" | "plain";
   note?: string;
+  /**
+   * A sparkline under the figure — where the number has been, not only where it is.
+   *
+   * A balance printed alone says nothing about whether it has been falling all week. The line is
+   * decoration only if the quantity has no history; where it has one, withholding it is the omission.
+   */
+  spark?: ReactNode;
 }) {
   return (
     <div className="card flex flex-col justify-center p-5">
       <p className="text-sm font-medium text-mut">{label}</p>
       <h3 className="mt-1 text-2xl font-semibold tabular-nums text-ink">{value}</h3>
+      {spark && <div className="mt-2 -mx-1">{spark}</div>}
       {trend && (
         <div
           className={`mt-2 flex items-center gap-1 text-xs font-semibold ${

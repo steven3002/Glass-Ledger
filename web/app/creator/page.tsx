@@ -17,6 +17,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useCatalog } from "@/components/catalog";
 import { DressImage } from "@/components/dress-image";
 import { ItemMoney } from "@/components/entity";
 import { ArrowRightIcon, TagIcon } from "@/components/icons";
@@ -36,6 +37,7 @@ type Sale = { itemId: bigint; claimCode: string; owner?: string };
 
 export default function InspectPage() {
   const { holdings, now } = useLedger();
+  const { nameOf } = useCatalog();
   const [where, setWhere] = useState<Deployment>();
   const [report, setReport] = useState<Report>();
   const [rails, setRails] = useState<DryRun[]>();
@@ -227,9 +229,10 @@ export default function InspectPage() {
               href={`/item/${String(report.itemId)}`}
               className="card-tap flex items-center gap-3 p-3"
             >
-              <DressImage id={Number(report.itemId)} label={`Item ${String(report.itemId)}`} className="size-14 shrink-0 rounded-xl border border-line" />
+              <DressImage id={Number(report.itemId)} label={nameOf(report.itemId)} className="size-14 shrink-0 rounded-xl border border-line" />
               <div className="min-w-0 flex-1">
-                <span className="text-sm font-semibold text-ink">Item {String(report.itemId)}</span>
+                <span className="text-sm font-semibold text-ink">{nameOf(report.itemId)}</span>
+                <div className="font-mono text-[0.66rem] text-faint">item {String(report.itemId)}</div>
                 <div className="text-xs text-mut">open the full dossier — its price, its proof, and its whole life →</div>
               </div>
               {item && (

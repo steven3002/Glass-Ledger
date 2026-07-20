@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -52,7 +53,17 @@ func (o *Ops) PostClaim(ctx context.Context, debtIDs []uint64, payment feeds.Pro
 // dead cannot silence her. The relayer *can* carry a signed challenge for a recipient who holds no gas
 // (`challengeFor`), and that is a convenience — never a gate.
 func (o *Ops) Challenge(ctx context.Context, claimID uint64) error {
-	if _, err := o.Client.Send(ctx, o.Keys.Creator, "challenge", func(auth *bind.TransactOpts) (*types.Transaction, error) {
+	return o.ChallengeFrom(ctx, claimID, o.Keys.Creator)
+}
+
+// ChallengeFrom is the same, from a named key.
+//
+// Whose key it is, is the whole substance of the act. A challenge is a creditor saying *I was not
+// paid*, and it means nothing said by anybody else — so a scenario covering several creators has to
+// send each challenge from the creator it belongs to, rather than from whichever key happens to be
+// to hand. The contract enforces this; sending the wrong one produces a revert, not a wrong result.
+func (o *Ops) ChallengeFrom(ctx context.Context, claimID uint64, key *ecdsa.PrivateKey) error {
+	if _, err := o.Client.Send(ctx, key, "challenge", func(auth *bind.TransactOpts) (*types.Transaction, error) {
 		return o.C.Debts.Challenge(auth, new(big.Int).SetUint64(claimID))
 	}); err != nil {
 		return err

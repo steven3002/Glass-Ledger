@@ -74,8 +74,22 @@ export type Item = {
   state: ItemState;
   price: bigint;
   owner: Address;
-  /** The tranche the chain's lazy slot names — 0 until the item is touched; the paperwork names it sooner. */
+  /**
+   * The consignment this item belongs to — the chain's slot when it has been written, the published
+   * paperwork when it has not. Never 0 for an item the shop actually holds.
+   */
   trancheId: bigint;
+  /**
+   * Whether the chain's own slot for this item has ever been written.
+   *
+   * Kept separate from `trancheId` on purpose. Filling the tranche in from the paperwork is right —
+   * an unsold item is somewhere, and saying "nowhere" would be worse than saying where — but it
+   * erases the one signal that told a reader whether the *state machine* has ever heard of this
+   * item. That distinction is the point of the "what the chain holds" panel: before a sale an item's
+   * entire on-chain footprint is one leaf under a root, and a page that reports a written slot where
+   * there is none is making a claim about storage that a reader can check and find false.
+   */
+  materialized: boolean;
   committedUntil: bigint;
 };
 
@@ -182,6 +196,15 @@ export type Entry = {
   tone: "plain" | "good" | "warn" | "alarm" | "quiet";
   /** Whose business this was, when the log names somebody. */
   who?: Address;
+  /**
+   * What this act did to the pool, where it touched it.
+   *
+   * Three of the pool's events emit the resulting balance outright, so the fund's level is something
+   * the contract states rather than something a page infers. `DefaultCovered` is the exception — it
+   * reports what was paid out, not what was left — so a payout is the one point that has to be
+   * derived, and the next stated balance corrects any drift immediately.
+   */
+  pool?: { balance?: bigint; paid?: bigint };
   /** What the log was about, when it names a thing — so a dossier can pull only its own lines. */
   itemId?: bigint;
   debtId?: bigint;
@@ -190,7 +213,34 @@ export type Entry = {
   creatorId?: bigint;
 };
 
-type Consignment = { items: { id: number; price: string }[] };
+/**
+ * The published paperwork, as the ledger read needs it.
+ *
+ * `farm` is a second consignment in the same file — the invented creator's. It is read exactly like
+ * the first, because its items are on chain like any other and a shelf that quietly omitted them
+ * would be the product hiding the very thing it was built to expose. Every page that counts items
+ * counts these too.
+ */
+type ConsignedItems = { trancheId: number; items: { id: number; price: string }[] };
+type Consignment = ConsignedItems & { farm?: ConsignedItems; catalog?: ConsignedItems[] };
+
+/**
+ * Every item the paperwork names, across every consignment in it.
+ *
+ * All three sources, always. The shelf is the answer to "what does this shop hold", and an item left
+ * out of it is not merely missing — it is *contradicted*: the chain says priced and in store, and the
+ * page says nothing at all. This is the one place that decides which consignments exist, so a new one
+ * is added here and everything downstream — shelf, stock counts, per-location prices, the item's own
+ * dossier — picks it up without being told.
+ */
+const allConsigned = (consignment: Consignment) =>
+  [consignment, ...(consignment.farm ? [consignment.farm] : []), ...(consignment.catalog ?? [])].flatMap((block) =>
+    // Each item carries the consignment it was posted under. The chain's own item slot holds this
+    // too, but only after something has happened to the item — an untouched unit's slot is empty,
+    // and every unsold thing in the shop is untouched. Reading placement from the state machine
+    // alone therefore answers "nowhere" for exactly the items a shopper is looking at.
+    block.items.map((item) => ({ ...item, consignedUnder: BigInt(block.trancheId) })),
+  );
 
 /**
  * The ledger is read in three stages, in the order a reader needs them — because waiting for all of it
@@ -272,9 +322,22 @@ export async function readHistory(where: Deployment): Promise<History> {
   return narrate(logs);
 }
 
+/**
+ * What to call an item when the catalog cannot say.
+ *
+ * A name is the catalog's job and this is only what shows while it is unreachable — but it still has
+ * to be true. The demo's dresses were minted at 1001 and are spoken of as "Item 1" through "Item 13"
+ * everywhere including the search box, so inside that block the offset is the real label. Outside it
+ * the offset is a lie that reads as a fact: item 3001 would come out "Item 2001", which is not a name
+ * anyone gave it and is indistinguishable from the id of a different item. So the id stands alone.
+ */
+function fallbackName(id: number): string {
+  return id > 1000 && id < 2000 ? `Item ${id - 1000}` : `Item ${id}`;
+}
+
 async function readItems(where: Deployment, consignment: Consignment): Promise<Item[]> {
   return Promise.all(
-    consignment.items.map(async ({ id }) => {
+    allConsigned(consignment).map(async ({ id, consignedUnder }) => {
       const itemId = BigInt(id);
       const [item, price] = await Promise.all([
         publicClient.readContract({
@@ -293,11 +356,15 @@ async function readItems(where: Deployment, consignment: Consignment): Promise<I
 
       return {
         id: itemId,
-        name: `Item ${id - 1000}`,
+        name: fallbackName(id),
         state: ITEM_STATES[item.state] ?? "ABSENT",
         price,
         owner: item.owner,
-        trancheId: item.trancheId,
+        // The chain's answer when it has one, the creator's paperwork when it does not. They cannot
+        // disagree — an item is minted under the tranche that consigned it and never moves — so this
+        // is filling a blank, not choosing between two claims.
+        trancheId: item.trancheId === 0n ? consignedUnder : item.trancheId,
+        materialized: item.trancheId !== 0n,
         committedUntil: item.committedUntil,
       };
     }),
@@ -512,13 +579,26 @@ async function narrate(logs: Log[]): Promise<{ entries: Entry[]; writeOffs: Writ
     logs,
   });
 
+  // When each event happened, in windows rather than all at once.
+  //
+  // `getBlock` is not a contract call, so Multicall3 cannot fold these the way it folds the rest of
+  // the ledger — the only lever left is how many are in flight. 0G's public RPC caps a burst at 50
+  // requests, and this fans out one read per block that carried an event: fine at the demo's forty,
+  // and over the cap once the catalog's trading took it past two hundred. The page did not report a
+  // rate limit; it reported the chain as unreachable, which is the wrong fact about the wrong party.
+  //
+  // The window is deliberately well under the cap, because this is not the only thing reading.
   const blocks = new Map<bigint, bigint>();
-  await Promise.all(
-    [...new Set(parsed.map((log) => log.blockNumber))].map(async (blockNumber) => {
-      const block = await publicClient.getBlock({ blockNumber });
-      blocks.set(blockNumber, block.timestamp);
-    }),
-  );
+  const numbers = [...new Set(parsed.map((log) => log.blockNumber))];
+  const WINDOW = 20;
+  for (let i = 0; i < numbers.length; i += WINDOW) {
+    await Promise.all(
+      numbers.slice(i, i + WINDOW).map(async (blockNumber) => {
+        const block = await publicClient.getBlock({ blockNumber });
+        blocks.set(blockNumber, block.timestamp);
+      }),
+    );
+  }
 
   const writeOffs: WriteOff[] = [];
   const entries: Entry[] = [];
@@ -548,6 +628,7 @@ async function narrate(logs: Log[]): Promise<{ entries: Entry[]; writeOffs: Writ
       sentence: said.sentence,
       tone: said.tone,
       who: said.who ?? (args.recipient as Address | undefined),
+      pool: poolMove(log.eventName, args),
       itemId: big(args.itemId),
       debtId: big(args.debtId),
       claimId: big(args.claimId),
@@ -558,6 +639,42 @@ async function narrate(logs: Log[]): Promise<{ entries: Entry[]; writeOffs: Writ
 
   entries.reverse();
   return { entries, writeOffs };
+}
+
+/** The pool's own arithmetic, taken from the events that carry it. */
+function poolMove(name: string, args: Record<string, unknown>): Entry["pool"] {
+  switch (name) {
+    case "SkimDeposited":
+    case "Reimbursed":
+    case "PoolDuesCollected":
+      return { balance: big(args.balance) };
+    case "DefaultCovered":
+      return { paid: big(args.paid) };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The pool's level over time, oldest first.
+ *
+ * Anchored on stated balances wherever the chain states one; a payout moves the running figure down
+ * by what it paid, and the next stated balance re-anchors it. So the line is the fund's own record of
+ * itself, not an accumulation this page invented and hopes is still right by the end.
+ */
+export function poolSeries(entries: Entry[]): { at: bigint; balance: bigint; entry: Entry }[] {
+  const points: { at: bigint; balance: bigint; entry: Entry }[] = [];
+  let running = 0n;
+
+  for (const entry of [...entries].reverse()) {
+    if (!entry.pool) continue;
+    if (entry.pool.balance !== undefined) running = entry.pool.balance;
+    else if (entry.pool.paid !== undefined) running = running > entry.pool.paid ? running - entry.pool.paid : 0n;
+    else continue;
+    points.push({ at: entry.at, balance: running, entry });
+  }
+
+  return points;
 }
 
 type Said = { sentence: string; tone: Entry["tone"]; who?: Address };

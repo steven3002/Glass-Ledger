@@ -27,13 +27,13 @@ export const LEDGER_TREE = [
  * for it. What a single unit is *doing* — sold, claimed, written off — is not this page's business;
  * that belongs to the item, and the item's own page carries it.
  *
- * It still points at the demo catalog while the index is wired underneath it.
+ * The demo shop stays reachable at /demo for reference; the real one is indexed off the chain.
  */
 export const GROUPS = [
   {
     label: "The goods",
     links: [
-      { href: "/demo/collections", name: "Collections", Icon: BagIcon },
+      { href: "/collections", name: "Collections", Icon: BagIcon },
       { href: "/map", name: "The map", Icon: GlobeIcon },
       { href: "/creator", name: "Inspect", Icon: TagIcon },
     ],

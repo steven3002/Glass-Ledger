@@ -42,9 +42,14 @@ const chain = defineChain({
   name: CHAIN_ID === 16602 ? "0G Galileo Testnet" : "Local development chain",
   nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
   rpcUrls: { default: { http: [RPC_URL] } },
-  // Multicall3 sits at its canonical address on both 0G Galileo and a fresh Anvil (it is one of the
-  // deterministic-deployment contracts), so naming it here lets the client aggregate the ledger's
-  // hundred-odd reads through it instead of firing them one by one at a rate-limited public RPC.
+  // Multicall3, at its canonical address, so the ledger's hundred-odd reads go out as one or two
+  // requests instead of a hundred at a rate-limited public RPC.
+  //
+  // It is on 0G Galileo. It is NOT on a fresh anvil — 1.7.1 ships without it, whatever older notes
+  // said — and the failure is total rather than graceful: every read is aggregated through this
+  // address, so an empty account means `0x` comes back for everything and viem reports it as a
+  // decode error on whichever call happened to be first. `scripts/seed-catalog.sh` provisions it
+  // locally with `anvil_setCode`.
   contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } },
 });
 

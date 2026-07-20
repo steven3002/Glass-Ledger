@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { LedgerIcon, SearchIcon } from "./icons";
+import { CHAIN_ID } from "@/lib/chain";
 import { MobileNav } from "./mobile-nav";
 
 const TITLES: Record<string, { title: string; sub: string }> = {
@@ -146,7 +147,7 @@ export function Topbar() {
       <div className="flex items-center gap-2 md:ml-0 ml-auto sm:gap-4">
         <span className="hidden items-center gap-2 rounded-full border border-line bg-sunken px-3 py-1 text-xs font-medium text-mut sm:flex">
           <span className="size-1.5 rounded-full bg-good-fill" />
-          0G Galileo · 16602
+          {CHAIN_ID === 16602 ? "0G Galileo" : "Local chain"} · {CHAIN_ID}
         </span>
 
         {/* Last in the bar, under the thumb — the hand holding the phone reaches this corner, not the

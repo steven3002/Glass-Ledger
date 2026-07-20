@@ -18,10 +18,12 @@ import { Plate, Tabs } from "@/components/entity";
 import { CardSkeleton, ChainError, Debts, pct, Timeline, useLedger } from "@/components/ledger-view";
 import { ProductTile } from "@/components/product";
 import { Badge, Empty, Meter, Panel, Skeleton } from "@/components/ui";
-import { naira, when } from "@/lib/format";
-import type { Cage } from "@/lib/ledger";
+import { naira, when, nairaShort } from "@/lib/format";
+import { useCatalog } from "@/components/catalog";
+import type { Cage, Holdings } from "@/lib/ledger";
+import { creatorNameOf, linesOf, type IndexedCollection } from "@/lib/index";
 import { linesAbout, purseOf } from "@/lib/ledger/profiles";
-import { collectionTotals, byCreator as demoByCreator, creatorName, type Collection } from "@/lib/demo/catalog";
+import { totalsOf } from "../../collections/page";
 
 const TABS = ["collections", "debts", "activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -32,6 +34,7 @@ export default function CreatorPage({ params }: { params: Promise<{ id: string }
 
   const { cage, holdings, history, problem, now } = useLedger();
   const [tab, setTab] = useState<Tab>("collections");
+  const { index } = useCatalog();
 
   if (problem && !cage) {
     return (
@@ -56,13 +59,17 @@ export default function CreatorPage({ params }: { params: Promise<{ id: string }
     );
   }
 
-  const name = creatorName(Number(creatorId)) ?? `Creator #${String(creatorId)}`;
+  // Her lines, from the indexer that groups them — not from the demo's hand-written catalog, which
+  // knew two creators and reported every other one as having published nothing while the collections
+  // page listed her work by name a click away.
+  const myCollections = linesOf(index, creatorId);
+  const name = creatorNameOf(index, creatorId);
   const creditLegs = (holdings?.debts ?? []).filter((d) => d.role === "creator" && d.creatorId === creatorId);
   const purse = purseOf(creditLegs);
   const volume = (holdings?.debts ?? [])
     .filter((d) => d.creatorId === creatorId && d.role !== "buyer")
     .reduce((sum, d) => sum + d.amount, 0n);
-  const myCollections = demoByCreator(Number(creatorId));
+
   const itemIds = new Set((holdings?.items ?? []).map((i) => i.id));
   const registered = history?.entries.find((e) => e.name === "CreatorRegistered" && e.creatorId === creatorId);
   const lines = history
@@ -99,9 +106,9 @@ export default function CreatorPage({ params }: { params: Promise<{ id: string }
               <FiguresRow className="mt-6">
                 <PageFigure label="Collections" value={String(myCollections.length)} first />
                 <PageFigure label="Sales" value={holdings ? String(purse.mintedCount) : undefined} />
-                <PageFigure label="Volume" value={holdings ? naira(volume) : undefined} />
-                <PageFigure label="Owed now" value={holdings ? naira(purse.owedNow) : undefined} />
-                <PageFigure label="Proven paid" value={holdings ? naira(purse.proven) : undefined} tone="good" />
+                <PageFigure label="Volume" value={holdings ? nairaShort(volume) : undefined} title={holdings ? naira(volume) : undefined} />
+                <PageFigure label="Owed now" value={holdings ? nairaShort(purse.owedNow) : undefined} title={holdings ? naira(purse.owedNow) : undefined} />
+                <PageFigure label="Proven paid" value={holdings ? nairaShort(purse.proven) : undefined} title={holdings ? naira(purse.proven) : undefined} tone="good" />
                 <PageFigure
                   label="Defaults"
                   value={holdings ? String(purse.defaultedCount) : undefined}
@@ -130,7 +137,7 @@ export default function CreatorPage({ params }: { params: Promise<{ id: string }
       </div>
 
       <div className="mt-6">
-        {tab === "collections" && <CreatorCollections collections={myCollections} />}
+        {tab === "collections" && <CreatorCollections collections={myCollections} holdings={holdings} />}
         {tab === "debts" && (holdings ? <Debts debts={creditLegs} now={now} role="creator" /> : <CardSkeleton rows={5} tall />)}
         {tab === "activity" && (
           <Panel title="Her lines of the record" hint="The public history, cut down to what is this creator's business.">
@@ -179,7 +186,13 @@ function Till({ capacity }: { capacity: NonNullable<Cage["capacity"][number]> })
 
 /* ---- Collections: the headline of the profile ---------------------------------------------------- */
 
-function CreatorCollections({ collections }: { collections: Collection[] }) {
+function CreatorCollections({
+  collections,
+  holdings,
+}: {
+  collections: IndexedCollection[];
+  holdings?: Holdings;
+}) {
   if (collections.length === 0) {
     return (
       <section className="card p-6">
@@ -191,19 +204,21 @@ function CreatorCollections({ collections }: { collections: Collection[] }) {
   return (
     <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {collections.map((c) => {
-        const totals = collectionTotals(c);
+        // The same totals the collections page shows, from the same function. Two pages counting the
+        // same line two ways is how a shop ends up contradicting itself in public.
+        const totals = totalsOf(c, holdings);
         return (
           <li key={c.id}>
-            <Link href={`/demo/collections/${c.id}`} className="card-tap group block overflow-hidden p-0">
+            <Link href={`/collections/${c.id}`} className="card-tap group block overflow-hidden p-0">
               <ProductTile name={c.name} className="aspect-[16/9]" />
               <div className="p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-semibold text-ink group-hover:underline">{c.name}</span>
-                  <Badge tone="plain">{totals.items} items</Badge>
+                  <Badge tone="plain">{totals.units} items</Badge>
                 </div>
                 <div className="mt-1 text-[0.68rem] text-faint">
-                  {totals.stock} in stock · {totals.sold} sold · {totals.locations}{" "}
-                  {totals.locations === 1 ? "location" : "locations"}
+                  {totals.inStore} in stock · {totals.sold} sold · {totals.places.length}{" "}
+                  {totals.places.length === 1 ? "location" : "locations"}
                 </div>
               </div>
             </Link>

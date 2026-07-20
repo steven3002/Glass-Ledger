@@ -82,42 +82,6 @@ export function Plate({ address, roles, note }: { address: string; roles: Role[]
 }
 
 /**
- * One unit in the gallery: the picture, the price, and where it stands — the card is the door to its
- * dossier.
- *
- * `name` and `variant` come from the catalog index when there is one, because the chain has no name
- * for an item: it knows id 1001, and "Oak Wood, 100 ml" is the shop's word for the same unit. The
- * price and the state underneath are always the chain's, whatever the index calls it — which is why
- * the id stays printed on every card, as the thing the two sides agree on.
- */
-export function ItemCard({ item, name, variant }: { item: Item; name?: string; variant?: string }) {
-  const label = name ?? item.name;
-
-  return (
-    <Link href={`/item/${String(item.id)}`} className="card-tap group block overflow-hidden p-0">
-      <div className="relative">
-        <DressImage id={Number(item.id)} label={label} className="aspect-[4/5]" />
-        <span className="absolute left-2 top-2">
-          <Badge tone={itemTone(item.state)} dot>
-            {shelfWord(item.state)}
-          </Badge>
-        </span>
-      </div>
-      <div className="p-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate text-sm font-semibold text-ink group-hover:underline">{label}</span>
-          <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">{naira(item.price)}</span>
-        </div>
-        <div className="mt-0.5 font-mono text-[0.68rem] text-faint">
-          item {String(item.id)}
-          {variant && <span className="ml-1.5 font-sans text-mut">· {variant}</span>}
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-/**
  * The sub-section switcher every account page shares.
  *
  * Tabs that sit *on* the rule rather than floating above it: the chosen one is a tinted tab with a

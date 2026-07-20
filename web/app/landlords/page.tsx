@@ -20,7 +20,7 @@ import { usePaged } from "@/components/paged";
 import { Avatar } from "@/components/product";
 import { TableShell, Td, Th, Tr } from "@/components/table";
 import { Badge, Meter, Skeleton } from "@/components/ui";
-import { naira, shortAddress } from "@/lib/format";
+import { naira, shortAddress, nairaShort } from "@/lib/format";
 import { profilesOf, type Profile } from "@/lib/ledger/profiles";
 
 export default function LandlordsPage() {
@@ -66,7 +66,7 @@ export default function LandlordsPage() {
       <FiguresRow>
         <PageFigure label="Landlords" value={landlords ? String(landlords.length) : undefined} first />
         <PageFigure label="Locations" value={landlords ? String(places.length) : undefined} />
-        <PageFigure label="Paid to spaces" value={totalOwed !== undefined ? naira(totalOwed) : undefined} />
+        <PageFigure label="Paid to spaces" value={totalOwed !== undefined ? nairaShort(totalOwed) : undefined} title={totalOwed !== undefined ? naira(totalOwed) : undefined} />
         <PageFigure
           label="Defaults suffered"
           value={defaults !== undefined ? String(defaults) : undefined}

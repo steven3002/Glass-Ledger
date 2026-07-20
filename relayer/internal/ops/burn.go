@@ -27,7 +27,10 @@ import (
 // The payouts are minted as ordinary debts on the ordinary clock. Declaring the loss is not the same as
 // bearing it: an operator that never pays them watches them default like any others.
 func (o *Ops) Burn(ctx context.Context, itemID uint64, reason string) error {
-	consignment, err := o.Consignment()
+	// Which consignment this item is in, and whose key signs for it. Resolved the same way a sale
+	// resolves it — a write-off proves membership exactly as a sale does, and an item can be written
+	// off from any of the shop's consignments, not only the first one.
+	consignment, signer, err := o.blockOf(itemID)
 	if err != nil {
 		return err
 	}
@@ -36,7 +39,7 @@ func (o *Ops) Burn(ctx context.Context, itemID uint64, reason string) error {
 		return err
 	}
 
-	item, signature, err := o.signedVoucher(ctx, o.Keys.Creator, consignment.CreatorID, itemID)
+	item, signature, err := o.signedVoucher(ctx, signer, consignment.CreatorID, itemID)
 	if err != nil {
 		return err
 	}

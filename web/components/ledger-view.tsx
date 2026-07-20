@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Pager, usePaged } from "@/components/paged";
+import { PoolSpark, type PoolPoint } from "@/components/pool-chart";
 import { Badge, Bytes, Delta, Empty, Gauge, Meter, Panel, Skeleton, StatCard } from "@/components/ui";
 import { deployment } from "@/lib/chain";
 import {
@@ -180,7 +181,7 @@ export function DebtSummary({
 
 /* ---- Stage 1: the cage ---------------------------------------------------------------------------- */
 
-export function CageRow({ cage }: { cage: Cage }) {
+export function CageRow({ cage, level = [] }: { cage: Cage; level?: PoolPoint[] }) {
   const { ceiling, pool, record } = cage;
   const shut = ceiling.headroom === 0n;
   const segs = [
@@ -263,7 +264,13 @@ export function CageRow({ cage }: { cage: Cage }) {
       </section>
 
       <div className="grid gap-4">
-        <StatCard label="The pool" value={naira(pool.balance)} trend={ceiling.frozen ? "frozen — cannot grow" : "backs every payout"} trendTone={ceiling.frozen ? "alarm" : "plain"} />
+        <StatCard
+          label="The pool"
+          value={naira(pool.balance)}
+          trend={ceiling.frozen ? "frozen — cannot grow" : "backs every payout"}
+          trendTone={ceiling.frozen ? "alarm" : "plain"}
+          spark={<PoolSpark points={level} className="h-8 w-full" />}
+        />
         <StatCard label="Defaults" value={String(record.defaults)} trend={record.defaults > 0n ? `${naira(record.defaultValue)} never paid` : "a clean record"} trendTone={record.defaults > 0n ? "alarm" : "good"} />
         <StatCard label="Claims voided" value={String(record.claimsVoided)} trend={record.claimsVoided > 0n ? "asserted, unprovable" : "nothing unproven"} trendTone={record.claimsVoided > 0n ? "alarm" : "good"} />
       </div>
@@ -459,28 +466,6 @@ function DebtRow({ debt, now }: { debt: Holdings["debts"][number]; now: number }
         <Badge tone={tone} dot>{inDefault ? "in default" : debt.state}</Badge>
       </div>
     </li>
-  );
-}
-
-export function Shelf({ items }: { items: Holdings["items"] }) {
-  const paged = usePaged(items, 10);
-  return (
-    <Panel title="The shelf" hint="Every item in the consignment, and where it stands.">
-      <ul className="divide-y divide-line">
-        {paged.slice.map((item) => (
-          <li key={String(item.id)} className="flex items-center justify-between gap-2 py-2.5 text-sm first:pt-0">
-            <span className="font-medium text-ink">
-              <Link href={`/item/${String(item.id)}`} className="transition-colors hover:underline">
-                {item.name}
-              </Link>
-              <span className="ml-2 font-mono text-[0.68rem] font-normal text-faint">{naira(item.price)}</span>
-            </span>
-            <Badge tone={itemTone(item.state)} dot>{shelfWord(item.state)}</Badge>
-          </li>
-        ))}
-      </ul>
-      <Pager page={paged.page} pages={paged.pages} start={paged.start} size={paged.size} total={paged.total} onPrev={paged.prev} onNext={paged.next} noun="items" />
-    </Panel>
   );
 }
 

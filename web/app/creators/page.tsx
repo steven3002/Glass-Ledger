@@ -23,9 +23,10 @@ import { usePaged } from "@/components/paged";
 import { Avatar, ProductTile } from "@/components/product";
 import { TableShell, Td, Th, Tr } from "@/components/table";
 import { Skeleton } from "@/components/ui";
-import { naira, shortAddress } from "@/lib/format";
+import { naira, shortAddress, nairaShort } from "@/lib/format";
 import type { Cage, Holdings } from "@/lib/ledger";
-import { byCreator, categoriesOf, CATEGORIES, creatorName } from "@/lib/demo/catalog";
+import { useCatalog } from "@/components/catalog";
+import { categoriesIn, categoriesOf, creatorNameOf, linesOf, type CatalogIndex } from "@/lib/index";
 import { purseOf, type Purse } from "@/lib/ledger/profiles";
 
 export default function CreatorsPage() {
@@ -33,12 +34,13 @@ export default function CreatorsPage() {
   const [category, setCategory] = useState("all");
   const [view, setView] = useState<View>("grid3");
   const [show, setShow] = useState(6);
+  const { index } = useCatalog();
 
   const rows = useMemo(() => {
     const all = cage?.capacity ?? [];
     if (category === "all") return all;
-    return all.filter((row) => categoriesOf(Number(row.creatorId)).includes(category));
-  }, [cage, category]);
+    return all.filter((row) => categoriesOf(index, row.creatorId).includes(category));
+  }, [cage, category, index]);
 
   const paged = usePaged(rows, show);
 
@@ -51,7 +53,7 @@ export default function CreatorsPage() {
   }
 
   const totalVolume = (holdings?.debts ?? []).filter((d) => d.role !== "buyer").reduce((s, d) => s + d.amount, 0n);
-  const lineCount = cage ? new Set(cage.capacity.flatMap((c) => byCreator(Number(c.creatorId)).map((x) => x.id))).size : undefined;
+  const lineCount = cage && index ? new Set(cage.capacity.flatMap((c) => linesOf(index, c.creatorId).map((x) => x.id))).size : undefined;
 
   return (
     <main className="mx-auto max-w-[1200px] px-6 pt-8 pb-14 sm:px-10 lg:px-12">
@@ -64,7 +66,7 @@ export default function CreatorsPage() {
       <FiguresRow>
         <PageFigure label="Creators" value={cage ? String(cage.capacity.length) : undefined} first />
         <PageFigure label="Open tills" value={cage ? String(cage.capacity.filter((c) => c.headroom > 0n).length) : undefined} tone="good" />
-        <PageFigure label="Volume" value={holdings ? naira(totalVolume) : undefined} />
+        <PageFigure label="Volume" value={holdings ? nairaShort(totalVolume) : undefined} title={holdings ? naira(totalVolume) : undefined} />
         <PageFigure label="Collections" value={lineCount !== undefined ? String(lineCount) : undefined} />
       </FiguresRow>
 
@@ -73,7 +75,7 @@ export default function CreatorsPage() {
           prefix="Category"
           value={category}
           onChange={setCategory}
-          options={[{ value: "all", label: "All" }, ...CATEGORIES.map((c) => ({ value: c, label: c }))]}
+          options={[{ value: "all", label: "All" }, ...categoriesIn(index).map((c) => ({ value: c, label: c }))]}
         />
         <span className="font-mono text-xs text-faint">
           {cage ? `${rows.length} ${rows.length === 1 ? "creator" : "creators"}` : "…"}
@@ -94,11 +96,11 @@ export default function CreatorsPage() {
           No creator on this shelf yet. A creator appears here the moment her registered key has a line in it.
         </p>
       ) : view === "list" ? (
-        <CreatorsTable rows={paged.slice} holdings={holdings} />
+        <CreatorsTable rows={paged.slice} holdings={holdings} index={index} />
       ) : (
         <ul className={`mt-8 grid gap-5 ${GRID_OF[view]}`}>
           {paged.slice.map((row) => (
-            <CreatorCard key={String(row.creatorId)} row={row} holdings={holdings} />
+            <CreatorCard key={String(row.creatorId)} row={row} holdings={holdings} index={index} />
           ))}
         </ul>
       )}
@@ -109,7 +111,7 @@ export default function CreatorsPage() {
 /* ---- The pieces ----------------------------------------------------------------------------------- */
 
 /** The list view: one creator per row, as a real table. */
-function CreatorsTable({ rows, holdings }: { rows: Cage["capacity"]; holdings?: Holdings }) {
+function CreatorsTable({ rows, holdings, index }: { rows: Cage["capacity"]; holdings?: Holdings; index?: CatalogIndex }) {
   return (
     <TableShell
       head={
@@ -126,8 +128,8 @@ function CreatorsTable({ rows, holdings }: { rows: Cage["capacity"]; holdings?: 
     >
       {rows.map((row) => {
         const id = Number(row.creatorId);
-        const name = creatorName(id) ?? `Creator #${id}`;
-        const lines = byCreator(id);
+        const name = creatorNameOf(index, id);
+        const lines = linesOf(index, id);
         const purse = purseOf((holdings?.debts ?? []).filter((d) => d.role === "creator" && d.creatorId === row.creatorId));
         const shut = row.headroom === 0n;
 
@@ -171,10 +173,10 @@ function CreatorsTable({ rows, holdings }: { rows: Cage["capacity"]; holdings?: 
  * One creator — the marketplace fusion of banner and profile: the line as the banner, the avatar
  * ringed in surface-white and riding the banner's lower edge, the name beneath it in the body.
  */
-function CreatorCard({ row, holdings }: { row: Cage["capacity"][number]; holdings?: Holdings }) {
+function CreatorCard({ row, holdings, index }: { row: Cage["capacity"][number]; holdings?: Holdings; index?: CatalogIndex }) {
   const id = Number(row.creatorId);
-  const name = creatorName(id) ?? `Creator #${id}`;
-  const lines = byCreator(id);
+  const name = creatorNameOf(index, id);
+  const lines = linesOf(index, id);
   const banner = lines[0]?.name ?? name;
   const purse = purseOf((holdings?.debts ?? []).filter((d) => d.role === "creator" && d.creatorId === row.creatorId));
   const shut = row.headroom === 0n;

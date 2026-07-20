@@ -14,6 +14,7 @@ import { CardSkeleton, ChainError, itemTone, shelfWord, useLedger } from "@/comp
 import { usePaged } from "@/components/paged";
 import { TableCard, Td, Th, Tr } from "@/components/table";
 import { Badge } from "@/components/ui";
+import { useCatalog } from "@/components/catalog";
 import { naira, shortAddress } from "@/lib/format";
 
 /** The shelf's own buckets — the words the census uses, so a figure and a filter always agree. */
@@ -30,6 +31,11 @@ export default function ShelfPage() {
   const { cage, holdings, problem } = useLedger();
   const [stand, setStand] = useState<Stand | "all">("all");
   const [show, setShow] = useState(10);
+
+  // The chain has no name for an item; the catalog does. The synthesised fallback is not merely bland
+  // but wrong on the second consignment — item 2001 renders as "Item 1001" — so the shelf asks the
+  // indexer, and still renders if it cannot answer.
+  const { nameOf } = useCatalog();
 
   const items = holdings?.items ?? [];
   const rows = stand === "all" ? items : items.filter((i) => standOf(i.state) === stand);
@@ -104,7 +110,7 @@ export default function ShelfPage() {
                   href={`/item/${String(item.id)}`}
                   className="font-medium text-ink underline decoration-line-strong underline-offset-2 transition-colors hover:decoration-ink"
                 >
-                  {item.name}
+                  {nameOf(item.id, item.name)}
                 </Link>
               </Td>
               <Td label="Id" secondary className="font-mono text-xs text-faint">

@@ -32,7 +32,9 @@ export GLASS_BUYER_KEY=0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c
 export GLASS_STRANGER_KEY=0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
 
 export GLASS_RPC_URL="$RPC"
-export GLASS_DATA_DIR="$root/artifacts/demo"
+# One shelf per chain — see seed-catalog.sh. A flat path here can be erased by, and can erase, the
+# testnet's own paperwork under artifacts/demo/<chainid>.
+export GLASS_DATA_DIR="$root/artifacts/demo/31337"
 
 log() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 

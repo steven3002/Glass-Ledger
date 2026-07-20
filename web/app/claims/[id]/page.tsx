@@ -25,7 +25,7 @@ import { WhoLink } from "@/components/entity";
 import { CardSkeleton, ChainError, claimTone, useLedger } from "@/components/ledger-view";
 import { Lifecycle } from "@/components/lifecycle";
 import { Badge, Bytes, Empty, Panel, Skeleton } from "@/components/ui";
-import { naira, untilDeadline, when, windowLeft } from "@/lib/format";
+import { naira, untilDeadline, when, windowLeft, nairaShort } from "@/lib/format";
 import type { Claim, Holdings } from "@/lib/ledger";
 import { linesAbout } from "@/lib/ledger/profiles";
 
@@ -182,7 +182,7 @@ function Masthead({ claim, debts }: { claim: Claim; debts: Holdings["debts"] }) 
       </p>
 
       <FiguresRow className="mt-6">
-        <PageFigure label="Asserted" value={naira(claim.totalAmount)} first />
+        <PageFigure label="Asserted" value={nairaShort(claim.totalAmount)} title={naira(claim.totalAmount)} first />
         <PageFigure label="Debts" value={String(claim.debtIds.length)} />
         <PageFigure label="Items" value={String(items.length)} />
         <PageFigure label="Posted" value={when(claim.postedAt)} />

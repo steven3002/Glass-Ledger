@@ -22,11 +22,11 @@ import { Lifecycle } from "@/components/lifecycle";
 import { CardSkeleton, ChainError, itemTone, shelfWord, useLedger } from "@/components/ledger-view";
 import { Badge, Bytes, Panel, Skeleton } from "@/components/ui";
 import { abi, deployment, publicClient } from "@/lib/chain";
-import { naira, shortHash, untilDeadline, when } from "@/lib/format";
+import { naira, shortHash, untilDeadline, when, nairaShort } from "@/lib/format";
 import type { Holdings } from "@/lib/ledger";
 import { claimsTouching, linesAbout } from "@/lib/ledger/profiles";
-import { collectionForItem, indexedItem, loadIndex, type CatalogIndex } from "@/lib/index";
-import { genuineTags, loadConsignment, rootOf, type Consignment, type WallTag } from "@/lib/tags";
+import { collectionForItem, loadIndex, type CatalogIndex, type IndexedCollection, type IndexedProduct } from "@/lib/index";
+import { blockFor, blocksOf, genuineTags, loadConsignment, rootOf, type Consignment, type WallTag } from "@/lib/tags";
 import { verifyMembership } from "@/lib/verify";
 
 /** The chain's answers that live outside the ledger read: the certificate and the price schedule. */
@@ -99,10 +99,19 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
   }
 
   // The paperwork side: the leaf, its path, and the root this browser computes from the published set.
-  const tag = consignment ? genuineTags(consignment).find((t) => BigInt(t.itemId) === itemId) : undefined;
-  const tranche = holdings?.tranches.find((t) => consignment && t.id === BigInt(consignment.trancheId));
+  //
+  // Against the item's OWN consignment. The file holds more than one — the creator's and the farm's —
+  // and each has its own tree and its own root. Walking a farm item's leaf up the creator's tree
+  // fails, and the failure looks exactly like a forgery, so the page would confidently condemn a
+  // genuine tag. The block is chosen first; everything below verifies against that.
+  const block = consignment ? blockFor(consignment, itemId) : undefined;
+  const tag = block ? genuineTags(block).find((t) => BigInt(t.itemId) === itemId) : undefined;
+  const tranche = holdings?.tranches.find((t) => block && t.id === BigInt(block.trancheId));
 
-  if (holdings && consignment && !tag) return <NoPaperwork itemId={itemId} count={consignment.items.length} />;
+  if (holdings && consignment && !tag) {
+    const published = blocksOf(consignment).reduce((n, b) => n + b.items.length, 0);
+    return <NoPaperwork itemId={itemId} count={published} />;
+  }
 
   const debts = holdings?.debts.filter((d) => d.itemId === itemId) ?? [];
   const debtIds = new Set(debts.map((d) => d.id));
@@ -129,10 +138,9 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
         itemId={itemId}
         item={item}
         tag={tag}
-        consignment={consignment}
+        consignment={block}
         tranche={tranche}
-        collection={index ? collectionForItem(index, itemId) : undefined}
-        indexed={index ? indexedItem(index, itemId) : undefined}
+        catalog={index ? collectionForItem(index, itemId) : undefined}
       />
 
       <div className="grid gap-5 [&>*]:min-w-0 lg:grid-cols-2">
@@ -142,8 +150,8 @@ export default function ItemPage({ params }: { params: Promise<{ id: string }> }
           ) : (
             <CardSkeleton rows={5} title />
           )}
-          {tag && consignment && tranche ? (
-            <PaperworkFacts tag={tag} consignment={consignment} chainRoot={tranche.root} />
+          {tag && block && tranche ? (
+            <PaperworkFacts tag={tag} consignment={block} chainRoot={tranche.root} />
           ) : (
             <CardSkeleton rows={4} title />
           )}
@@ -186,25 +194,28 @@ function Masthead({
   tag,
   consignment,
   tranche,
-  collection,
-  indexed,
+  catalog,
 }: {
   itemId: bigint;
   item?: Holdings["items"][number];
   tag?: WallTag;
   consignment?: Consignment;
   tranche?: Holdings["tranches"][number];
-  /** The line this unit belongs to, per the index. The chain has no idea; grouping is editorial. */
-  collection?: { id: string; name: string };
-  /** What the shop calls this exact unit — a name and a variant the contract never stored. */
-  indexed?: { name: string; variant: string };
+  /**
+   * What the shop calls this unit, and the line it belongs to.
+   *
+   * The chain has no idea about either. It knows item 1001; that this is a bottle of Burnt Wood, and
+   * that Burnt Wood belongs to Àṣẹ Atelier, is the indexer's editorial layer — which is why it is
+   * labelled as such below and never mixed in with the facts underneath it.
+   */
+  catalog?: { collection: IndexedCollection; product: IndexedProduct };
 }) {
   return (
     <section className="card p-6" style={{ boxShadow: "var(--shadow-pop)" }}>
       <div className="flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-start sm:gap-6">
         <DressImage
           id={Number(itemId)}
-          label={item?.name ?? `Item ${String(itemId)}`}
+          label={catalog?.product.name ?? item?.name ?? `Item ${String(itemId)}`}
           className="aspect-[4/5] w-36 shrink-0 rounded-2xl border border-line"
         />
 
@@ -221,21 +232,28 @@ function Masthead({
           {item ? (
             <>
               <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight">
-                {indexed?.name ?? item.name}
+                {catalog?.product.name ?? item.name}
                 <Badge tone={itemTone(item.state)}>{shelfWord(item.state)}</Badge>
               </h1>
-              {/* The identity the chain does not carry. A unit's name, its variant and the line it
-                  belongs to are indexed metadata — the contract knows only that item 1001 exists —
-                  so they are stated here and never confused with the facts below them. */}
-              {(indexed || collection) && (
+              {/* The identity the chain does not carry. A unit's name and the line it belongs to are
+                  indexed metadata — the contract knows only that item 1001 exists — so they are
+                  stated here, labelled, and never confused with the facts below them. */}
+              {catalog && (
                 <p className="mt-1.5 text-sm text-mut">
-                  {indexed && <span>{indexed.variant}</span>}
-                  {indexed && collection && " · "}
-                  {collection && (
-                    <span>
-                      in <span className="font-medium text-ink-2">{collection.name}</span>
-                    </span>
-                  )}
+                  one of{" "}
+                  <Link
+                    href={`/collections/${catalog.collection.id}/${catalog.product.id}`}
+                    className="font-medium text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink"
+                  >
+                    {catalog.product.name}
+                  </Link>{" "}
+                  in{" "}
+                  <Link
+                    href={`/collections/${catalog.collection.id}`}
+                    className="font-medium text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink"
+                  >
+                    {catalog.collection.name}
+                  </Link>
                   <span className="ml-2 text-[0.7rem] text-faint">indexed, not on chain</span>
                 </p>
               )}
@@ -255,7 +273,7 @@ function Masthead({
           )}
 
           <FiguresRow className="mt-6">
-            <PageFigure label="Price" value={item ? naira(item.price) : undefined} first />
+            <PageFigure label="Price" value={item ? nairaShort(item.price) : undefined} title={item ? naira(item.price) : undefined} first />
             <PageFigure label="Item" value={String(itemId)} />
             {tranche && <PageFigure label="Consignment" value={`#${String(tranche.id)}`} />}
             {tranche && <PageFigure label="Location" value={tranche.location} />}
@@ -310,12 +328,12 @@ function ChainFacts({
           )}
         </Fact>
         <Fact label="On-chain slot">
-          {item.trancheId === 0n ? (
+          {item.materialized ? (
+            <span className="text-mut">materialized, in collection #{String(item.trancheId)}</span>
+          ) : (
             <span className="text-mut">
               never written — until a sale touches item {String(itemId)}, its entire footprint is one leaf under the root
             </span>
-          ) : (
-            <span className="text-mut">materialized, in collection #{String(item.trancheId)}</span>
           )}
         </Fact>
         <Fact label="Held by">

@@ -54,9 +54,21 @@ func (o *Ops) TouchDebt(ctx context.Context, debtID uint64) error {
 		return err
 	}
 
+	paid := new(big.Int).Sub(balanceAfter, balanceBefore)
+	unpaid := new(big.Int).Sub(debt.Amount, paid)
+
 	o.Say("  stranger %s touched debt #%d", short(chain.Address(o.Keys.Stranger)), debtID)
-	o.Say("  → %s paid %s from the pool, in full, having sent no transaction of her own",
-		short(debt.Recipient), money(new(big.Int).Sub(balanceAfter, balanceBefore)))
+	if unpaid.Sign() > 0 {
+		// The fund did not have it. Said plainly, because this is the case the whole design is
+		// judged on and the one a demo is most tempted to round up: a pool too small to compensate
+		// somebody is not a smaller wrong done to them, and the contract records the *whole*
+		// defaulted amount for exactly that reason.
+		o.Say("  → %s was owed %s and the pool could only find %s — SHORT %s, and she is simply out "+
+			"of pocket for it", short(debt.Recipient), money(debt.Amount), money(paid), money(unpaid))
+	} else {
+		o.Say("  → %s paid %s from the pool, in full, having sent no transaction of her own",
+			short(debt.Recipient), money(paid))
+	}
 	o.Say("  → the operator's capacity with creator #%s written down to %s; it now owes the pool %s, "+
 		"and its growth is frozen — with everybody, not only with her",
 		debt.CreatorId, money(allowance), money(owed))
