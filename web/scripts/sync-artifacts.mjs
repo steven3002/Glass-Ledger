@@ -67,6 +67,23 @@ async function abiOf(name) {
 }
 
 async function generateAbis() {
+  // The generated file is committed, and on a hosting build it is the only copy there is.
+  //
+  // These ABIs are a projection of `contracts/out`, which is Foundry's build output: gitignored,
+  // machine-local, and absent from a git checkout. Vercel has no Foundry and never will, so a build
+  // there cannot regenerate them — it can only use what was committed. Regenerating locally, where
+  // the contracts have actually been compiled, keeps the file honest; skipping the regeneration when
+  // there is nothing to regenerate *from* is what lets the same script serve both places.
+  //
+  // The failure this replaces was loud but misleading: "CreatorRegistry has not been compiled. Run
+  // `forge build`" — sound advice on a laptop, impossible on a build machine that has no contracts
+  // directory to compile.
+  const generated = path.join(web, "lib", "chain", "generated", "abi.ts");
+  if (!existsSync(path.join(root, "contracts", "out")) && existsSync(generated)) {
+    console.log("  abi.ts — using the committed copy (contracts/out is not in this checkout)");
+    return;
+  }
+
   const entries = [];
 
   for (const [key, name] of Object.entries(CONTRACTS)) {
@@ -185,6 +202,18 @@ async function copyPublishedBlobs() {
   const to = path.join(web, "public", "blobs");
   await rm(to, { recursive: true, force: true });
   await mkdir(to, { recursive: true });
+
+  // No local blobs is a legitimate state, not a broken checkout.
+  //
+  // On a public chain the vouchers are published to 0G Storage and the directory here is only a
+  // cache — gitignored, machine-local, and absent from a hosting build. The browser fetches each
+  // voucher from the 0G indexer by its pointer and hashes it itself, so serving them from this
+  // origin would be a convenience and never the mechanism. Refusing to build over it would refuse
+  // exactly the deployment this project is for.
+  if (!existsSync(from)) {
+    console.log("  blobs — none local; the vouchers are read from 0G Storage by pointer");
+    return;
+  }
 
   // Only the content-addressed copies: a reader who has the pointer from a tag is the reader this
   // store exists for, and the human-readable aliases beside them are a debugging convenience that
